@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Run manifest",
+  "type": "object",
+  "required": ["schema_version", "type", "run_id", "status", "current_stage", "stages", "history"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "Run"},
+    "run_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "status": {"enum": ["active", "waiting_for_human", "failed", "accepted", "rejected"]},
+    "current_stage": {"type": ["string", "null"], "enum": ["exploration", "plan", "execution", "test", "acceptance", null]},
+    "created_at": {"type": "string"},
+    "updated_at": {"type": "string"},
+    "stages": {
+      "type": "object",
+      "required": ["exploration", "plan", "execution", "test", "acceptance"],
+      "properties": {
+        "exploration": {"$ref": "#/$defs/stage"},
+        "plan": {"$ref": "#/$defs/stage"},
+        "execution": {"$ref": "#/$defs/stage"},
+        "test": {"$ref": "#/$defs/stage"},
+        "acceptance": {"$ref": "#/$defs/stage"}
+      },
+      "additionalProperties": false
+    },
+    "history": {"type": "array", "items": {"type": "object"}}
+  },
+  "$defs": {
+    "stage": {
+      "type": "object",
+      "required": ["role", "status", "attempt_count"],
+      "properties": {
+        "role": {"enum": ["sol", "execution_agent"]},
+        "status": {"enum": ["pending", "active", "waiting_for_human", "failed", "completed", "rejected"]},
+        "attempt_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "inputs": {
+      "type": "object",
+      "required": ["input_hashes"],
+      "properties": {"input_hashes": {"type": "array", "items": {"type": "string", "minLength": 1}}},
+      "additionalProperties": true
+    },
+    "plan_completed_data": {
+      "type": "object",
+      "required": ["steps", "risks"],
+      "properties": {
+        "steps": {"type": "array"},
+        "risks": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": true
+    },
+    "execution_completed_data": {
+      "type": "object",
+      "required": ["commands", "return_codes", "output_paths"],
+      "properties": {
+        "commands": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "return_codes": {"type": "array", "items": {"type": "integer"}},
+        "output_paths": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      },
+      "additionalProperties": true
+    },
+    "test_completed_data": {
+      "type": "object",
+      "required": ["test_results"],
+      "properties": {"test_results": {"type": "array"}},
+      "additionalProperties": true
+    },
+    "acceptance_completed_data": {
+      "type": "object",
+      "required": ["verdict", "unresolved_risks"],
+      "properties": {
+        "verdict": {"enum": ["PASS", "FAIL", "CANNOT_VERIFY"]},
+        "test_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "unresolved_risks": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "return_to": {"enum": ["execution", "test"]},
+        "reason": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

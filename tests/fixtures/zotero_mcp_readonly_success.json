@@ -1,0 +1,9 @@
+{
+  "operation": "zotero_get_item_fulltext",
+  "params": {"item_key": "SYNTH001"},
+  "result": {
+    "item_key": "SYNTH001",
+    "attachment_key": "SYNTHATT1",
+    "fulltext": "Synthetic read-only full text."
+  }
+}

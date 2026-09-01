@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","title":"Verification","type":"object","required":["schema_version","gate_id","status","scope"],"properties":{"schema_version":{"const":1},"gate_id":{"type":"string"},"status":{"enum":["PASS","PASS_WITH_NOTES","FAIL","CANNOT_VERIFY","NOT_APPLICABLE"]},"scope":{"type":"string"}},"additionalProperties":true}

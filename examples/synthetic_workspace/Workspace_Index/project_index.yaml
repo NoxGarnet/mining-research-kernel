@@ -1,0 +1,13 @@
+workspace: ..
+last_updated: 2026-09-01
+
+project_entries:
+  - project: synthetic_flac3d
+    path: projects/flac3D/
+    entry: projects/flac3D/START.md
+  - project: synthetic_acoustic_emission
+    path: projects/acoustic_emission/
+    entry: projects/acoustic_emission/START.md
+  - project: synthetic_ceramsite
+    path: projects/master_thesis_ceramsite_concrete/
+    entry: projects/master_thesis_ceramsite_concrete/START.md
