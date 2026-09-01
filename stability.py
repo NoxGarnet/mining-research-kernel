@@ -6,6 +6,12 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 VOLATILE_FIELDS = {"at", "created_at", "updated_at", "last_verified", "exported_at"}
+STABILITY_ROOT = Path(__file__).resolve().parent
+DEFAULT_COMMAND_TIMEOUT = 30.0
+MAX_COMMAND_TIMEOUT = 120.0
+_REGISTERED_STABILITY_CHECKS = (
+    (str(Path(sys.executable).resolve()), "-m", "compileall", "-q", "."),
+)
 
 def canonical(value: Any) -> Any:
     if isinstance(value, dict):
@@ -131,9 +137,20 @@ def ledger_metrics(runs_root: str | Path, run_ids: list[str]) -> dict[str, Any]:
     return {"schema_version": SCHEMA_VERSION, "runs": per_run, "totals": overall,
             "metric_definitions": {"additional_attempts": "attempt_count minus one per stage, floored at zero; acceptance failures are reported separately and may overlap", "acceptance_failures": "acceptance attempts with verdict FAIL or return_to", "waiting_events": "attempts whose status is waiting_for_human"}}
 
-def run_command(command: list[str], cwd: str | Path) -> dict[str, Any]:
-    start = time.perf_counter(); result = subprocess.run(command, cwd=str(cwd), capture_output=True, text=True)
-    return {"command": " ".join(command), "elapsed_seconds": round(time.perf_counter()-start, 6), "return_code": result.returncode,
+def run_command(argv: list[str], cwd: str | Path, *, timeout: float = DEFAULT_COMMAND_TIMEOUT) -> dict[str, Any]:
+    """Run one exact pre-registered stability check, never an arbitrary command."""
+    if not isinstance(argv, list) or not argv or any(not isinstance(arg, str) for arg in argv):
+        raise ValueError("argv must be a non-empty list of strings")
+    if tuple(argv) not in _REGISTERED_STABILITY_CHECKS:
+        raise ValueError("argv must match a pre-registered stability check")
+    run_cwd = Path(cwd).resolve()
+    if run_cwd != STABILITY_ROOT:
+        raise ValueError("cwd must be the repository root")
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= MAX_COMMAND_TIMEOUT:
+        raise ValueError(f"timeout must be between 0 and {MAX_COMMAND_TIMEOUT} seconds")
+    start = time.perf_counter(); result = subprocess.run(argv, cwd=str(run_cwd), capture_output=True, text=True,
+                                                          shell=False, timeout=float(timeout), check=False)
+    return {"command": " ".join(argv), "elapsed_seconds": round(time.perf_counter()-start, 6), "return_code": result.returncode,
             "stdout": result.stdout[-2000:], "stderr": result.stderr[-2000:]}
 
 def rebuild_relation_artifacts(run_artifacts: str | Path, snapshot_paths: list[str | Path], manifest: str | Path, ris: str | Path, markdown_root: str | Path) -> dict[str, Any]:

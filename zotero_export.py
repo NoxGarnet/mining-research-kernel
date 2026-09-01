@@ -1,12 +1,12 @@
 """E-side read-only Zotero Local API exporter."""
 from __future__ import annotations
-import argparse, hashlib, json, re, socket
+import argparse, hashlib, json, re
 from datetime import datetime, timezone
 from urllib.parse import quote, urlparse
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from zotero_snapshot import normalize_doi, validate_snapshot
 
-DEFAULT_BASE="http://127.0.0.1:23119/api"; LOOPBACK={"127.0.0.1","::1","localhost"}; KEY_RE=re.compile(r"^[A-Za-z0-9]+$"); MAX_PAGES=1000; MAX_ITEMS=100000
+DEFAULT_BASE="http://127.0.0.1:23119/api"; LOOPBACK={"127.0.0.1","::1"}; KEY_RE=re.compile(r"^[A-Za-z0-9]+$"); MAX_PAGES=1000; MAX_ITEMS=100000; MAX_RESPONSE_BYTES=16*1024*1024
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self,*args,**kwargs): raise ValueError("redirects are forbidden for Zotero export")
 def ensure_loopback(base_url):
@@ -14,10 +14,7 @@ def ensure_loopback(base_url):
     if p.scheme!="http" or p.username is not None or p.password is not None or p.query or p.fragment or p.port != 23119: raise ValueError("base URL must be http loopback port 23119 without userinfo/query/fragment")
     if p.path.rstrip("/")!="/api": raise ValueError("base URL path must be /api")
     host=p.hostname
-    if host not in LOOPBACK: raise ValueError("base URL host must be loopback")
-    if host=="localhost":
-        addresses={x[4][0] for x in socket.getaddrinfo(host,23119,type=socket.SOCK_STREAM)}
-        if not addresses or any(not (a in LOOPBACK or a.startswith("127.")) for a in addresses): raise ValueError("localhost does not resolve exclusively to loopback")
+    if host not in LOOPBACK: raise ValueError("base URL host must be a numeric loopback IP literal")
     return "http://[::1]:23119/api" if host=="::1" else f"http://{host}:23119/api"
 def validate_collection_key(key):
     key=(key or "").strip()
@@ -27,7 +24,14 @@ def get_json(base_url,path):
     url=ensure_loopback(base_url)+"/"+path.lstrip("/")
     req=Request(url,method="GET",headers={"Accept":"application/json"})
     with build_opener(NoRedirect()).open(req,timeout=10) as response:
-        return json.loads(response.read().decode("utf-8")), dict(response.headers.items())
+        content_length=response.headers.get("Content-Length")
+        if content_length is not None:
+            try: declared=int(content_length)
+            except (TypeError,ValueError): raise ValueError("invalid Zotero Content-Length header")
+            if declared < 0 or declared > MAX_RESPONSE_BYTES: raise ValueError("Zotero response exceeded MAX_RESPONSE_BYTES")
+        body=response.read(MAX_RESPONSE_BYTES+1)
+        if len(body)>MAX_RESPONSE_BYTES: raise ValueError("Zotero response exceeded MAX_RESPONSE_BYTES")
+        return json.loads(body.decode("utf-8")), dict(response.headers.items())
 def export_snapshot(base_url=DEFAULT_BASE,collection_key=None,all_library=False,instance_seed=None):
     if bool(collection_key) == bool(all_library): raise ValueError("collection_key and all_library are strict XOR")
     if instance_seed is None or not str(instance_seed).strip(): raise ValueError("stable instance_seed is required")

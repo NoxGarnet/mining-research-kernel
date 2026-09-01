@@ -1,6 +1,8 @@
 import hashlib, json, tempfile, unittest
 from pathlib import Path
-from stability import diagnose, canonical, host_capabilities, ledger_metrics
+from types import SimpleNamespace
+from unittest.mock import patch
+from stability import STABILITY_ROOT, _REGISTERED_STABILITY_CHECKS, diagnose, canonical, host_capabilities, ledger_metrics, run_command
 
 class StabilityTests(unittest.TestCase):
     def base(self, root):
@@ -52,5 +54,19 @@ class StabilityTests(unittest.TestCase):
             self.assertEqual(metrics['totals']['waiting_events'], 1)
     def test_diagnose_does_not_modify_source(self):
         root=Path(tempfile.mkdtemp()); a=self.base(root); before=(root/'source.txt').read_bytes(); diagnose([a],root); self.assertEqual(before,(root/'source.txt').read_bytes())
+
+    def test_run_command_only_accepts_registered_check_with_controls(self):
+        argv=list(_REGISTERED_STABILITY_CHECKS[0])
+        with patch("stability.subprocess.run", return_value=SimpleNamespace(returncode=0, stdout="ok", stderr="")) as runner:
+            result=run_command(argv, STABILITY_ROOT, timeout=12)
+        runner.assert_called_once_with(argv, cwd=str(STABILITY_ROOT), capture_output=True, text=True, shell=False, timeout=12.0, check=False)
+        self.assertEqual(0, result["return_code"])
+
+    def test_run_command_rejects_unregistered_argv_and_uncontrolled_inputs(self):
+        argv=list(_REGISTERED_STABILITY_CHECKS[0])
+        with self.assertRaises(ValueError): run_command([argv[0], "-c", "print('arbitrary')"], STABILITY_ROOT)
+        with self.assertRaises(ValueError): run_command(tuple(argv), STABILITY_ROOT)
+        with self.assertRaises(ValueError): run_command(argv, STABILITY_ROOT.parent)
+        with self.assertRaises(ValueError): run_command(argv, STABILITY_ROOT, timeout=0)
 
 if __name__ == "__main__": unittest.main()

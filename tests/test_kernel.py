@@ -1,12 +1,12 @@
 import json, sys, tempfile, unittest, subprocess
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 from mining_kernel import validate_record, safe_path, discover_all
 import mining_kernel
 import run_ledger
 from zotero_snapshot import SnapshotError, load_snapshot, snapshot_to_assets
-from zotero_export import ensure_loopback, NoRedirect, export_snapshot
+from zotero_export import ensure_loopback, NoRedirect, export_snapshot, get_json
 from run_ledger import BUNDLE_FILES, RunLedgerError, create_run, inspect_run, record_stage, validate_bundle
 from support import make_synthetic_workspace
 
@@ -80,11 +80,34 @@ class KernelTests(unittest.TestCase):
     def test_exporter_rejects_non_loopback_before_network(self):
         with self.assertRaises(ValueError): ensure_loopback("https://example.invalid/api")
         with self.assertRaises(ValueError): ensure_loopback("http://192.0.2.1:23119/api")
-        for url in ("https://127.0.0.1:23119/api","http://127.0.0.1:9999/api","http://127.0.0.1:23119/api/../items","http://u:p@127.0.0.1:23119/api?x=1","http://127.0.0.1:23119/api#x","http://127.0.0.1/api"):
+        for url in ("http://localhost:23119/api","http://zotero:23119/api","https://127.0.0.1:23119/api","http://127.0.0.1:9999/api","http://127.0.0.1:23119/api/../items","http://u:p@127.0.0.1:23119/api?x=1","http://127.0.0.1:23119/api#x","http://127.0.0.1/api"):
             with self.assertRaises(ValueError): ensure_loopback(url)
+        self.assertEqual("http://127.0.0.1:23119/api", ensure_loopback("http://127.0.0.1:23119/api"))
+        self.assertEqual("http://[::1]:23119/api", ensure_loopback("http://[::1]:23119/api"))
         with self.assertRaises(ValueError): NoRedirect().redirect_request(None,"http://127.0.0.1:23119/api",None)
         with self.assertRaises(ValueError): export_snapshot(collection_key=" ", all_library=False, instance_seed="stable")
         with self.assertRaises(ValueError): export_snapshot(collection_key="ABC", all_library=True, instance_seed="stable")
+
+    def test_exporter_rejects_oversized_http_responses_before_json_parse(self):
+        response=MagicMock(); response.__enter__.return_value=response; response.headers={"Content-Length":"9"}
+        with patch("zotero_export.MAX_RESPONSE_BYTES",8), patch("zotero_export.build_opener") as build_opener:
+            build_opener.return_value.open.return_value=response
+            with self.assertRaisesRegex(ValueError,"MAX_RESPONSE_BYTES"):
+                get_json("http://127.0.0.1:23119/api","users/0/items")
+        response.read.assert_not_called()
+
+        chunked=MagicMock(); chunked.__enter__.return_value=chunked; chunked.headers={}; chunked.read.return_value=b"x"*9
+        with patch("zotero_export.MAX_RESPONSE_BYTES",8), patch("zotero_export.build_opener") as build_opener:
+            build_opener.return_value.open.return_value=chunked
+            with self.assertRaisesRegex(ValueError,"MAX_RESPONSE_BYTES"):
+                get_json("http://127.0.0.1:23119/api","users/0/items")
+        chunked.read.assert_called_once_with(9)
+
+        valid=MagicMock(); valid.__enter__.return_value=valid; valid.headers={"Content-Length":"2"}; valid.read.return_value=b"[]"
+        with patch("zotero_export.MAX_RESPONSE_BYTES",8), patch("zotero_export.build_opener") as build_opener:
+            build_opener.return_value.open.return_value=valid
+            data,headers=get_json("http://127.0.0.1:23119/api","users/0/items")
+        self.assertEqual([],data); self.assertEqual("2",headers["Content-Length"]); valid.read.assert_called_once_with(9)
     def test_exporter_mock_pagination_parent_aggregation_and_limits(self):
         first=[]
         for i in range(99): first.append({"key":f"P{i}","version":1,"data":{"key":f"P{i}","version":1,"itemType":"journalArticle","title":f"T{i}","collections":[],"tags":[]}})
