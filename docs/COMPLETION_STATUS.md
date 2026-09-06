@@ -427,8 +427,8 @@ The stable working-tree snapshot was independently rechecked with Codex
 Security scan `b0a9fc64-ec22-4a73-b884-52451a977a78`. The completed report
 covered 10 surfaces, found zero reportable findings, and emitted no snapshot
 change warning. Coverage remains `partial` because the file-symlink runtime
-test is unavailable on this host and fresh-clone/private-staging were not
-authorized or available.
+test is unavailable on this host; fresh-clone and Private staging were
+completed below.
 
 The recheck confirms that the four original direct R6 paths are closed under
 the current local trust boundary. A hostile concurrent replacement of an
@@ -442,3 +442,24 @@ Final local acceptance counts remain: 172 tests run, 171 passed, 1 skipped;
 passed formal Draft 2020-12 validation; the README synthetic validation
 command returned zero with three fixture results free of errors. Scan token
 usage was unavailable from the Codex rollout and is not estimated.
+
+## Candidate and Private staging acceptance, 2026-09-06
+
+The reviewed working tree was fixed locally as commit `0dafaa4` on branch
+`candidate/v0.1.0`. The target repository visibility was read back as Private.
+The staging branch `candidate/v0.1.0` was pushed and independently read back
+through both `git ls-remote` and the GitHub branch API as commit
+`0dafaa4313e1137ad64ded171e661ebe95db19ce`.
+
+A clean clone from that Private staging branch had the same commit and a
+clean working tree. In that clone, the full test runner reported 172 run, 171
+passed and 1 skipped; the skipped case remained the file-symlink test. The
+README commands for discover, inspect, discover-sources, inspect-source and
+validate all returned successfully, with the synthetic validate command
+reporting three fixtures without errors. The ten representative generated or
+fixture outputs again passed formal Draft 2020-12 validation.
+
+The only remaining R6 qualification items are the unavailable file-symlink
+capability and the documented hostile concurrent parent-replacement limit.
+Public visibility, tag and Release decisions remain separate and were not
+performed.
