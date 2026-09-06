@@ -1,8 +1,8 @@
 # Mining Research Kernel
 
-A small, filesystem-native kernel for read-only research discovery, explicit
-contracts, source snapshots, deterministic relation mapping, and auditable run
-ledgers. It uses only the Python standard library and does not require a
+A small, filesystem-native kernel for research discovery, explicit contracts,
+source snapshots, bounded local records, deterministic relation mapping, and
+auditable run ledgers. It uses only the Python standard library and does not require a
 database, network access, Zotero, or commercial research software for its
 public examples.
 
@@ -15,7 +15,22 @@ silently rewrite research files or turn metadata into experimental conclusions.
 
 ## Current capabilities
 
+- Portable blank FLAC3D project initialization and configuration-driven discovery.
 - Two read-only project adapters for a compatible mining-research workspace.
+- An explicit local HTML documentation check with source/version binding and
+  command-name-only coverage; see the [documentation guide](docs/R1_DOCUMENTATION.md).
+- R2 task packets, persisted TaskState, bounded synthetic fake execution,
+  RunReference/Verification records, Zotero-backed synthetic evidence and
+  deterministic Research Map rebuild; see the [R2 quick start](docs/R2_QUICKSTART.md).
+- R3 bounded multi-route exploration with per-route budgets, durable
+  reservations, write-set conflict blocking, parent/supersede relations and
+  deterministic comparison archives; see the [R3 quick start](docs/R3_QUICKSTART.md).
+- R4 file-native Core Cognition with mechanical evidence, bounded provisional
+  admission, dependency invalidation, scoped structured conflicts, a deduplicated
+  review queue and filtered failure recovery; see the [R4 quick start](docs/R4_QUICKSTART.md).
+- R5 fresh-user subprocess acceptance and a second-domain synthetic workflow
+  using the same TaskEngine, ResearchStore, Run Ledger, Verification and view
+  rebuild path; see the [R5 quick start](docs/R5_QUICKSTART.md).
 - A static `kind=source` Zotero adapter with only `discover`, `inspect`, and
   `read_only` capabilities.
 - Sanitized Zotero snapshot validation and collection/item/attachment
@@ -25,6 +40,13 @@ silently rewrite research files or turn metadata into experimental conclusions.
 - A filesystem-native five-stage Run Ledger with deterministic validation and
   stability diagnostics.
 - Standard-library-only tests and a fully synthetic workspace example.
+
+The expanded v0.1.0 route and cognition loop is implemented through R5 in the
+current working tree. See [completion status](docs/COMPLETION_STATUS.md) for
+accepted stages and limits.
+Local documentation checks do not establish script correctness, executable
+availability, numerical validity or engineering suitability. Live Itasca
+execution remains outside the current implementation.
 
 ## Quick start
 
@@ -42,6 +64,31 @@ python mining_kernel.py --workspace examples/synthetic_workspace validate
 The last source inspection intentionally reports `CANNOT_VERIFY` because no
 external Zotero reader is supplied by the example. A compatible application
 may inject a reader for one allowed operation.
+
+For an empty user-owned project directory:
+
+```powershell
+python mining_kernel.py init-flac3d-project path/to/new-project --project-id demo_project
+python mining_kernel.py --workspace path/to/new-project discover
+python mining_kernel.py documentation-check --help
+```
+
+The initializer refuses non-empty directories. Configure the project's actual
+version and inputs before use; the empty baseline is not a ready model. The
+documentation command requires a separate, explicitly selected Host source
+registration described in the guide. It never treats a metadata index or
+injected callback as sufficient official evidence.
+
+For the complete synthetic task, evidence and rebuild loop, follow the
+[R5 quick start](docs/R5_QUICKSTART.md). A second domain can use the shared
+kernel through a separate portable fixture project:
+
+```powershell
+python mining_kernel.py init-synthetic-project path/to/synthetic-project --project-id synthetic_demo
+```
+
+Synthetic execution is a deterministic fixture. It does not run FLAC3D,
+validate numerical or engineering behavior, or enable `itasca-mcp`.
 
 For snapshot-only workflows:
 

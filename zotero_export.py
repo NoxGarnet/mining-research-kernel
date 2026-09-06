@@ -4,6 +4,7 @@ import argparse, hashlib, json, re
 from datetime import datetime, timezone
 from urllib.parse import quote, urlparse
 from urllib.request import Request, build_opener, HTTPRedirectHandler
+from mining_research_kernel.artifacts import atomic_write_json
 from zotero_snapshot import normalize_doi, validate_snapshot
 
 DEFAULT_BASE="http://127.0.0.1:23119/api"; LOOPBACK={"127.0.0.1","::1"}; KEY_RE=re.compile(r"^[A-Za-z0-9]+$"); MAX_PAGES=1000; MAX_ITEMS=100000; MAX_RESPONSE_BYTES=16*1024*1024
@@ -87,5 +88,5 @@ def export_snapshot(base_url=DEFAULT_BASE,collection_key=None,all_library=False,
 def main(argv=None):
     p=argparse.ArgumentParser(); p.add_argument("--base-url",default=DEFAULT_BASE); p.add_argument("--collection-key"); p.add_argument("--all-library",action="store_true"); p.add_argument("--instance-seed",required=True); p.add_argument("--output",required=True); a=p.parse_args(argv)
     snapshot=export_snapshot(a.base_url,a.collection_key,a.all_library,a.instance_seed)
-    with open(a.output,"w",encoding="utf-8",newline="\n") as f: json.dump(snapshot,f,ensure_ascii=False,indent=2); f.write("\n")
+    atomic_write_json(a.output, snapshot)
 if __name__=="__main__": main()

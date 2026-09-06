@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -14,12 +15,14 @@ from typing import Any
 SCHEMA_VERSION = 1
 STAGES = ("exploration", "plan", "execution", "test", "acceptance")
 ROLE_BY_STAGE = {
-    "exploration": "sol",
-    "plan": "sol",
+    "exploration": "planning_agent",
+    "plan": "planning_agent",
     "execution": "execution_agent",
     "test": "execution_agent",
-    "acceptance": "sol",
+    "acceptance": "acceptance_agent",
 }
+LEGACY_ROLE = "sol"
+LEGACY_ROLE_STAGES = {"exploration", "plan", "acceptance"}
 STAGE_FILES = {
     "exploration": "exploration.yaml",
     "plan": "plan.yaml",
@@ -39,6 +42,9 @@ BUNDLE_FILES = (
 )
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 RECORD_STATUSES = {"completed", "waiting_for_human", "failed"}
+OPERATION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+LOCK_FILE = ".run.lock"
+JOURNAL_FILE = ".run-journal.json"
 
 
 class RunLedgerError(ValueError):
@@ -96,6 +102,141 @@ def _load_json(path: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RunLedgerError(f"{path.name} must contain a JSON object")
     return value
+
+
+def _validate_operation_id(operation_id: str) -> str:
+    if not isinstance(operation_id, str) or not OPERATION_ID_RE.fullmatch(operation_id):
+        raise RunLedgerError("operation_id must be a 1-128 character ASCII identifier")
+    return operation_id
+
+
+def _hash_document(value: dict[str, Any]) -> str:
+    import hashlib
+    return hashlib.sha256(_json_bytes(value)).hexdigest()
+
+
+def _pid_alive(pid: Any) -> bool:
+    if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # A permission failure does not establish that the owner ended.
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _acquire_lock(run_dir: Path, operation_id: str) -> None:
+    lock = run_dir / LOCK_FILE
+    metadata = {"pid": os.getpid(), "operation_id": operation_id, "created_at": _now()}
+    try:
+        fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError as exc:
+        try:
+            owner = _load_json(lock)
+        except RunLedgerError as load_exc:
+            raise RunLedgerError("malformed run lock; refusing to take it over") from load_exc
+        if (not isinstance(owner.get("pid"), int) or isinstance(owner.get("pid"), bool)
+                or not isinstance(owner.get("operation_id"), str) or not OPERATION_ID_RE.fullmatch(owner["operation_id"])
+                or not isinstance(owner.get("created_at"), str)):
+            raise RunLedgerError("malformed run lock; refusing to take it over")
+        if _pid_alive(owner.get("pid")):
+            raise RunLedgerError("run is locked by a live writer")
+        # The liveness check is the recovery proof; age alone is never used.
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as retry_exc:
+            raise RunLedgerError("run lock changed during recovery; refusing to take it over") from retry_exc
+    except OSError as exc:
+        raise RunLedgerError(f"cannot acquire run lock: {exc}") from exc
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(metadata, stream, ensure_ascii=False, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+        raise
+
+
+def _release_lock(run_dir: Path, operation_id: str) -> None:
+    lock = run_dir / LOCK_FILE
+    try:
+        owner = _load_json(lock)
+    except RunLedgerError:
+        return
+    if owner.get("pid") == os.getpid() and owner.get("operation_id") == operation_id:
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def _journal_documents(journal: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    if journal.get("schema_version") != SCHEMA_VERSION or not isinstance(journal.get("operation_id"), str):
+        raise RunLedgerError("malformed run journal")
+    _validate_operation_id(journal["operation_id"])
+    before = journal.get("before")
+    after = journal.get("after")
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        raise RunLedgerError("malformed run journal documents")
+    stage_before, manifest_before = before.get("stage"), before.get("manifest")
+    stage_after, manifest_after = after.get("stage"), after.get("manifest")
+    if not all(isinstance(item, dict) for item in (stage_before, manifest_before, stage_after, manifest_after)):
+        raise RunLedgerError("malformed run journal documents")
+    hashes = journal.get("hashes")
+    if not isinstance(hashes, dict) or any(not isinstance(hashes.get(key), str) for key in ("stage_before", "manifest_before", "stage_after", "manifest_after")):
+        raise RunLedgerError("malformed run journal hashes")
+    if (_hash_document(stage_before) != hashes["stage_before"] or _hash_document(manifest_before) != hashes["manifest_before"]
+            or _hash_document(stage_after) != hashes["stage_after"] or _hash_document(manifest_after) != hashes["manifest_after"]):
+        raise RunLedgerError("run journal hash mismatch")
+    return stage_before, manifest_before, stage_after, manifest_after
+
+
+def _recover_run(run_dir: Path) -> None:
+    journal_path = run_dir / JOURNAL_FILE
+    if not journal_path.exists():
+        return
+    journal = _load_json(journal_path)
+    stage_before, manifest_before, stage_after, manifest_after = _journal_documents(journal)
+    stage_path = run_dir / STAGE_FILES.get(journal.get("stage"), "")
+    manifest_path = run_dir / "manifest.json"
+    if not stage_path.name or journal.get("run_id") != run_dir.name or not stage_path.is_file() or not manifest_path.is_file():
+        raise RunLedgerError("malformed run journal target")
+    current_stage, current_manifest = _load_json(stage_path), _load_json(manifest_path)
+    sb, mb = _hash_document(current_stage) == _hash_document(stage_before), _hash_document(current_manifest) == _hash_document(manifest_before)
+    sa, ma = _hash_document(current_stage) == _hash_document(stage_after), _hash_document(current_manifest) == _hash_document(manifest_after)
+    if sa and ma:
+        journal_path.unlink()
+        return
+    if not ((sb or sa) and (mb or ma)):
+        raise RunLedgerError("run journal does not match current bundle; refusing recovery")
+    if sb:
+        _atomic_write(stage_path, stage_after)
+    if mb:
+        _atomic_write(manifest_path, manifest_after)
+    journal_path.unlink()
+
+
+def _with_recovery(run_dir: Path, operation_id: str | None = None) -> None:
+    op = operation_id or f"recovery-{uuid.uuid4().hex}"
+    _acquire_lock(run_dir, op)
+    try:
+        _recover_run(run_dir)
+    finally:
+        _release_lock(run_dir, op)
 
 
 def _stage_document(run_id: str, stage: str) -> dict[str, Any]:
@@ -203,98 +344,138 @@ def record_stage(
     model: str,
     inputs: Any = None,
     outputs: Any = None,
+    operation_id: str | None = None,
+    failure_hook: Any = None,
 ) -> dict[str, Any]:
     run_dir = resolve_run_dir(runs_root, run_id)
-    manifest = _load_json(run_dir / "manifest.json")
-    errors = validate_bundle(runs_root, run_id)
-    if errors:
-        raise RunLedgerError("invalid run bundle: " + "; ".join(errors))
-    if stage not in STAGES:
-        raise RunLedgerError(f"unknown stage: {stage}")
-    if role != ROLE_BY_STAGE[stage]:
-        raise RunLedgerError(f"stage {stage} requires role {ROLE_BY_STAGE[stage]}")
-    if status not in RECORD_STATUSES:
-        raise RunLedgerError(f"unsupported record status: {status}")
-    if stage == "acceptance" and status == "failed":
-        raise RunLedgerError("acceptance does not allow status failed; use completed with verdict FAIL")
-    if not isinstance(model, str) or not model.strip():
-        raise RunLedgerError("model must be a non-empty string")
-    if manifest.get("current_stage") != stage:
-        raise RunLedgerError(f"cannot record {stage}; current_stage is {manifest.get('current_stage')!r}")
+    if operation_id is not None:
+        _validate_operation_id(operation_id)
+    lock_operation = operation_id or f"record-{uuid.uuid4().hex}"
+    _acquire_lock(run_dir, lock_operation)
+    try:
+        _recover_run(run_dir)
+        manifest = _load_json(run_dir / "manifest.json")
+        errors = _validate_bundle(run_dir, run_id)
+        if errors:
+            raise RunLedgerError("invalid run bundle: " + "; ".join(errors))
+        if stage not in STAGES:
+            raise RunLedgerError(f"unknown stage: {stage}")
+        if role == LEGACY_ROLE and stage in LEGACY_ROLE_STAGES:
+            canonical_role = ROLE_BY_STAGE[stage]
+        elif role == ROLE_BY_STAGE[stage]:
+            canonical_role = role
+        else:
+            raise RunLedgerError(f"stage {stage} requires role {ROLE_BY_STAGE[stage]}")
+        if status not in RECORD_STATUSES:
+            raise RunLedgerError(f"unsupported record status: {status}")
+        if stage == "acceptance" and status == "failed":
+            raise RunLedgerError("acceptance does not allow status failed; use completed with verdict FAIL")
+        if not isinstance(model, str) or not model.strip():
+            raise RunLedgerError("model must be a non-empty string")
 
-    data = {} if data is None else data
-    if not isinstance(data, dict):
-        raise RunLedgerError("stage data must be an object")
-    if status == "completed":
-        _validate_completed_evidence(stage, data)
-    recorded_at = _now()
-    document = _load_json(run_dir / STAGE_FILES[stage])
-    attempt = {
-        "attempt": len(document["attempts"]) + 1,
-        "at": recorded_at,
-        "role": role,
-        "model": model.strip(),
-        "status": status,
-        "inputs": inputs,
-        "outputs": outputs,
-        "data": data,
-    }
-    document["attempts"].append(attempt)
-    manifest["stages"][stage]["attempt_count"] += 1
+        data = {} if data is None else data
+        if not isinstance(data, dict):
+            raise RunLedgerError("stage data must be an object")
+        if status == "completed":
+            _validate_completed_evidence(stage, data)
+        request_fingerprint = _hash_document({"stage": stage, "role": canonical_role, "status": status,
+                                               "model": model.strip(), "inputs": inputs, "outputs": outputs, "data": data})
+        document = _load_json(run_dir / STAGE_FILES[stage])
+        if operation_id is not None:
+            for prior_stage, prior_name in STAGE_FILES.items():
+                prior_doc = document if prior_stage == stage else _load_json(run_dir / prior_name)
+                for prior in prior_doc.get("attempts", []):
+                    if isinstance(prior, dict) and prior.get("operation_id") == operation_id:
+                        if prior.get("request_fingerprint") != request_fingerprint:
+                            raise RunLedgerError("operation_id was already used for a different request")
+                        return manifest
+        if manifest.get("current_stage") != stage:
+            raise RunLedgerError(f"cannot record {stage}; current_stage is {manifest.get('current_stage')!r}")
+        recorded_at = _now()
+        attempt = {
+            "attempt": len(document["attempts"]) + 1,
+            "at": recorded_at,
+            "role": canonical_role,
+            "model": model.strip(),
+            "status": status,
+            "inputs": inputs,
+            "outputs": outputs,
+            "data": data,
+        }
+        if operation_id is not None:
+            attempt["operation_id"] = operation_id
+            attempt["request_fingerprint"] = request_fingerprint
+        document["attempts"].append(attempt)
+        manifest["stages"][stage]["attempt_count"] += 1
 
-    if status == "waiting_for_human":
-        manifest["status"] = "waiting_for_human"
-        manifest["stages"][stage]["status"] = "waiting_for_human"
-    elif status == "failed":
-        manifest["status"] = "failed"
-        manifest["stages"][stage]["status"] = "failed"
-    elif stage != "acceptance":
-        _advance(manifest, stage)
-    else:
-        verdict = data.get("verdict")
-        if verdict == "PASS":
-            _string_list(data.get("test_evidence"), "acceptance PASS test_evidence", nonempty=True)
-            manifest["stages"][stage]["status"] = "completed"
-            manifest["status"] = "accepted"
-            manifest["current_stage"] = None
-        elif verdict == "FAIL":
-            _string_list(data.get("test_evidence"), "acceptance FAIL test_evidence", nonempty=True)
-            return_to = data.get("return_to")
-            if return_to not in {"execution", "test"}:
-                raise RunLedgerError("acceptance FAIL requires return_to execution or test")
-            manifest["stages"][stage]["status"] = "rejected"
-            manifest["status"] = "rejected"
-            manifest["current_stage"] = return_to
-            start = STAGES.index(return_to)
-            for later in STAGES[start:]:
-                manifest["stages"][later]["status"] = "active" if later == return_to else "pending"
-        elif verdict == "CANNOT_VERIFY":
-            reason = data.get("reason")
-            if not isinstance(reason, str) or not reason.strip():
-                raise RunLedgerError("acceptance CANNOT_VERIFY requires reason")
+        if status == "waiting_for_human":
             manifest["status"] = "waiting_for_human"
             manifest["stages"][stage]["status"] = "waiting_for_human"
+        elif status == "failed":
+            manifest["status"] = "failed"
+            manifest["stages"][stage]["status"] = "failed"
+        elif stage != "acceptance":
+            _advance(manifest, stage)
         else:
-            raise RunLedgerError("acceptance completed requires verdict PASS, FAIL, or CANNOT_VERIFY")
+            verdict = data.get("verdict")
+            if verdict == "PASS":
+                _string_list(data.get("test_evidence"), "acceptance PASS test_evidence", nonempty=True)
+                manifest["stages"][stage]["status"] = "completed"
+                manifest["status"] = "accepted"
+                manifest["current_stage"] = None
+            elif verdict == "FAIL":
+                _string_list(data.get("test_evidence"), "acceptance FAIL test_evidence", nonempty=True)
+                return_to = data.get("return_to")
+                if return_to not in {"execution", "test"}:
+                    raise RunLedgerError("acceptance FAIL requires return_to execution or test")
+                manifest["stages"][stage]["status"] = "rejected"
+                manifest["status"] = "rejected"
+                manifest["current_stage"] = return_to
+                start = STAGES.index(return_to)
+                for later in STAGES[start:]:
+                    manifest["stages"][later]["status"] = "active" if later == return_to else "pending"
+            elif verdict == "CANNOT_VERIFY":
+                reason = data.get("reason")
+                if not isinstance(reason, str) or not reason.strip():
+                    raise RunLedgerError("acceptance CANNOT_VERIFY requires reason")
+                manifest["status"] = "waiting_for_human"
+                manifest["stages"][stage]["status"] = "waiting_for_human"
+            else:
+                raise RunLedgerError("acceptance completed requires verdict PASS, FAIL, or CANNOT_VERIFY")
 
-    manifest["updated_at"] = recorded_at
-    manifest["history"].append({
-        "event": "stage_recorded",
-        "at": recorded_at,
-        "stage": stage,
-        "attempt": attempt["attempt"],
-        "record_status": status,
-        "manifest_status": manifest["status"],
-        "current_stage": manifest["current_stage"],
-    })
-    _atomic_write(run_dir / STAGE_FILES[stage], document)
-    _atomic_write(run_dir / "manifest.json", manifest)
-    return manifest
+        manifest["updated_at"] = recorded_at
+        manifest["history"].append({
+            "event": "stage_recorded",
+            "at": recorded_at,
+            "stage": stage,
+            "attempt": attempt["attempt"],
+            "record_status": status,
+            "manifest_status": manifest["status"],
+            "current_stage": manifest["current_stage"],
+        })
+        journal = {"schema_version": SCHEMA_VERSION, "run_id": run_id, "stage": stage, "operation_id": lock_operation,
+                   "before": {"stage": _load_json(run_dir / STAGE_FILES[stage]), "manifest": _load_json(run_dir / "manifest.json")},
+                   "after": {"stage": document, "manifest": manifest}}
+        journal["hashes"] = {"stage_before": _hash_document(journal["before"]["stage"]),
+                              "manifest_before": _hash_document(journal["before"]["manifest"]),
+                              "stage_after": _hash_document(document), "manifest_after": _hash_document(manifest)}
+        _atomic_write(run_dir / JOURNAL_FILE, journal)
+        _atomic_write(run_dir / STAGE_FILES[stage], document)
+        if failure_hook is not None:
+            try:
+                failure_hook("after_stage")
+            except TypeError:
+                failure_hook()
+        _atomic_write(run_dir / "manifest.json", manifest)
+        (run_dir / JOURNAL_FILE).unlink()
+        return manifest
+    finally:
+        _release_lock(run_dir, lock_operation)
 
 
-def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
+def _validate_bundle(run_dir: Path, run_id: str) -> list[str]:
     try:
-        run_dir = resolve_run_dir(runs_root, run_id)
+        validate_run_id(run_id)
     except RunLedgerError as exc:
         return [str(exc)]
     errors: list[str] = []
@@ -351,7 +532,7 @@ def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
                 if not isinstance(state, dict):
                     errors.append(f"manifest.json {stage} state must be an object")
                     continue
-                if state.get("role") != ROLE_BY_STAGE[stage]:
+                if state.get("role") != ROLE_BY_STAGE[stage] and not (state.get("role") == LEGACY_ROLE and stage in LEGACY_ROLE_STAGES):
                     errors.append(f"manifest.json {stage} role mismatch")
                 if state.get("status") not in {"pending", "active", "waiting_for_human", "failed", "completed", "rejected"}:
                     errors.append(f"manifest.json {stage} status is invalid")
@@ -380,9 +561,9 @@ def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
                     errors.append("accepted run must have current_stage null")
                 if any(stages[stage].get("status") != "completed" for stage in STAGES):
                     errors.append("accepted run must have all stages completed")
-                if (not acceptance or latest.get("role") != "sol" or latest.get("status") != "completed"
+                if (not acceptance or latest.get("role") not in {ROLE_BY_STAGE["acceptance"], LEGACY_ROLE} or latest.get("status") != "completed"
                         or latest_data.get("verdict") != "PASS"):
-                    errors.append("accepted run lacks latest Sol acceptance PASS")
+                    errors.append("accepted run lacks latest acceptance PASS")
                 if not isinstance(evidence, list) or not evidence or not all(isinstance(item, str) and item.strip() for item in evidence):
                     errors.append("accepted run has invalid test_evidence")
                 if not isinstance(risks, list) or not all(isinstance(item, str) and item.strip() for item in risks):
@@ -397,7 +578,7 @@ def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
                             continue
                         if attempt.get("attempt") != index:
                             errors.append(f"{name} attempt numbering mismatch")
-                        if attempt.get("role") != ROLE_BY_STAGE[stage]:
+                        if attempt.get("role") != ROLE_BY_STAGE[stage] and not (attempt.get("role") == LEGACY_ROLE and stage in LEGACY_ROLE_STAGES):
                             errors.append(f"{name} attempt role mismatch")
                         if not isinstance(attempt.get("model"), str) or not attempt.get("model").strip():
                             errors.append(f"{name} attempt model is invalid")
@@ -419,6 +600,17 @@ def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
         if not isinstance(manifest.get("history"), list):
             errors.append("manifest.json history must be a list")
     return errors
+
+
+def validate_bundle(runs_root: str | Path, run_id: str) -> list[str]:
+    try:
+        run_dir = resolve_run_dir(runs_root, run_id)
+        if not run_dir.is_dir():
+            return [f"missing run directory: {run_id}"]
+        _with_recovery(run_dir)
+        return _validate_bundle(run_dir, run_id)
+    except RunLedgerError as exc:
+        return [str(exc)]
 
 
 def inspect_run(runs_root: str | Path, run_id: str) -> dict[str, Any]:

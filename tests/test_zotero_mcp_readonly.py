@@ -23,7 +23,7 @@ class ZoteroMcpReadonlyTests(unittest.TestCase):
 
     def test_default_registry_exposes_only_readonly_source_capabilities(self):
         records = DEFAULT_REGISTRY.by_kind("source")
-        self.assertEqual(["zotero_mcp_readonly"], [row.extension_id for row in records])
+        self.assertEqual(["mining_research_kernel.source.zotero_readonly"], [row.extension_id for row in records])
         self.assertEqual(frozenset({"discover", "inspect", "read_only"}), records[0].capabilities)
         source = discover_sources(self.workspace)[0]
         self.assertEqual("REGISTERED_READ_ONLY", source["status"])

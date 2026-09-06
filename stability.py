@@ -1,8 +1,16 @@
 """Read-only stability checks and deterministic regression helpers."""
 from __future__ import annotations
 import hashlib, json, re, subprocess, sys, time
+import os
+if os.name == "nt":
+    import ctypes
+    import msvcrt
+else:
+    ctypes = None
+    msvcrt = None
 from pathlib import Path
 from typing import Any
+from mining_research_kernel.artifacts import ensure_output_directory
 
 SCHEMA_VERSION = 1
 VOLATILE_FIELDS = {"at", "created_at", "updated_at", "last_verified", "exported_at"}
@@ -10,7 +18,8 @@ STABILITY_ROOT = Path(__file__).resolve().parent
 DEFAULT_COMMAND_TIMEOUT = 30.0
 MAX_COMMAND_TIMEOUT = 120.0
 _REGISTERED_STABILITY_CHECKS = (
-    (str(Path(sys.executable).resolve()), "-m", "compileall", "-q", "."),
+    (str(Path(sys.executable).resolve()), "-B", "-c",
+     "from pathlib import Path; [compile(p.read_text(encoding='utf-8-sig'), str(p), 'exec') for p in Path('.').rglob('*.py')]"),
 )
 
 def canonical(value: Any) -> Any:
@@ -32,6 +41,61 @@ def _walk(value: Any, where: str = "root"):
         for i, child in enumerate(value):
             yield from _walk(child, f"{where}[{i}]")
 
+
+def _workspace_candidate(root: Path, value: Any) -> tuple[Path | None, str | None]:
+    if not isinstance(value, str) or not value:
+        return None, "invalid"
+    normalized = value.replace("\\", "/")
+    relative = Path(normalized)
+    if (relative.is_absolute() or normalized.startswith(("/", "//", "file:"))
+            or re.match(r"^[A-Za-z]:", normalized) or ".." in relative.parts):
+        return None, "unsafe"
+    try:
+        candidate = (root / relative).resolve()
+    except (OSError, RuntimeError):
+        return None, "unsafe"
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None, "unsafe"
+    return candidate, None
+
+
+def _windows_handle_path(descriptor: int) -> Path | None:
+    if os.name != "nt":
+        return None
+    handle = msvcrt.get_osfhandle(descriptor)
+    buffer = ctypes.create_unicode_buffer(32768)
+    length = ctypes.windll.kernel32.GetFinalPathNameByHandleW(
+        ctypes.c_void_p(handle), buffer, len(buffer), 0
+    )
+    if not length or length >= len(buffer):
+        raise OSError("could not resolve the opened file handle")
+    value = buffer.value
+    if value.startswith("\\\\?\\UNC\\"):
+        value = "\\\\" + value[8:]
+    elif value.startswith("\\\\?\\"):
+        value = value[4:]
+    return Path(value)
+
+
+def _read_verified_bytes(root: Path, candidate: Path) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(candidate, flags)
+    try:
+        actual = _windows_handle_path(descriptor)
+        if actual is not None:
+            actual = actual.resolve()
+            try:
+                actual.relative_to(root)
+            except ValueError as exc:
+                raise ValueError("opened source escaped the workspace") from exc
+        with os.fdopen(descriptor, "rb", closefd=False) as stream:
+            return stream.read()
+    finally:
+        os.close(descriptor)
+
 def diagnose(records: list[dict[str, Any]], workspace: str | Path | None = None) -> dict[str, Any]:
     """Return deterministic diagnostics without mutating records or files."""
     errors: list[dict[str, Any]] = []
@@ -51,12 +115,24 @@ def diagnose(records: list[dict[str, Any]], workspace: str | Path | None = None)
             ids.setdefault(aid, []).append(f"{pid}.assets[{ai}]")
             paths.setdefault(path, []).append(f"{pid}.assets[{ai}]")
             if root and path:
-                candidate = root / path.replace("/", "/")
-                if not candidate.exists():
+                candidate, path_error = _workspace_candidate(root, path)
+                if path_error:
+                    errors.append({"code": "unsafe_workspace_path", "asset_id": aid, "path": path})
+                    continue
+                if candidate is None or not candidate.exists():
                     errors.append({"code": "missing_source_or_attachment", "asset_id": aid, "path": path})
                 expected = asset.get("sha256")
-                if expected and candidate.is_file():
-                    actual = hashlib.sha256(candidate.read_bytes()).hexdigest()
+                if expected and candidate is not None and candidate.is_file():
+                    try:
+                        content = _read_verified_bytes(root, candidate)
+                    except ValueError:
+                        errors.append({"code": "unsafe_workspace_path", "asset_id": aid, "path": path})
+                        continue
+                    except OSError as exc:
+                        errors.append({"code": "unreadable_source", "asset_id": aid, "path": path,
+                                       "detail": str(exc)})
+                        continue
+                    actual = hashlib.sha256(content).hexdigest()
                     if actual != expected:
                         errors.append({"code": "registered_hash_drift", "asset_id": aid, "path": path, "expected": expected, "actual": actual})
         for obj, where in _walk(project):
@@ -64,8 +140,11 @@ def diagnose(records: list[dict[str, Any]], workspace: str | Path | None = None)
                 errors.append({"code": "unknown_schema_version", "where": where, "found": obj["schema_version"], "expected": SCHEMA_VERSION})
             for key in ("path", "attachment_path", "source_path"):
                 value = obj.get(key)
-                if root and isinstance(value, str) and value and not re.match(r"^(?:[A-Za-z]:[\\/]|/|file:)", value):
-                    if not (root / value.replace("/", "/")).exists():
+                if root and isinstance(value, str) and value:
+                    candidate, path_error = _workspace_candidate(root, value)
+                    if path_error:
+                        errors.append({"code": "unsafe_workspace_path", "where": where, "path": value})
+                    elif candidate is None or not candidate.exists():
                         errors.append({"code": "missing_source_or_attachment", "where": where, "path": value})
     for aid, locations in sorted(ids.items()):
         if aid and len(locations) > 1: errors.append({"code": "duplicate_asset_id", "asset_id": aid, "locations": locations})
@@ -155,7 +234,7 @@ def run_command(argv: list[str], cwd: str | Path, *, timeout: float = DEFAULT_CO
 
 def rebuild_relation_artifacts(run_artifacts: str | Path, snapshot_paths: list[str | Path], manifest: str | Path, ris: str | Path, markdown_root: str | Path) -> dict[str, Any]:
     from relation_map import combine_snapshots, load_snapshot, build_mapping, write_artifacts
-    out = Path(run_artifacts); out.mkdir(parents=True, exist_ok=True)
+    out = ensure_output_directory(run_artifacts)
     result = build_mapping(combine_snapshots([load_snapshot(p) for p in snapshot_paths]), manifest, ris, markdown_root)
     write_artifacts(result, out)
     return {"schema_version": SCHEMA_VERSION, "rebuildable": True, "artifact_names": sorted(p.name for p in out.glob("*.json")),

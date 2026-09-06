@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Core Cognition derived view",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "project_id", "research_questions", "routes", "provisional", "supported_within_scope", "accepted", "proposed", "contested", "stale", "pending_review", "missing_evidence", "failures"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "CoreCognition"},
+    "project_id": {"type": "string", "minLength": 1},
+    "research_questions": {"type": "array", "items": {"type": "object"}},
+    "routes": {"type": "array", "items": {"type": "object"}},
+    "provisional": {"type": "array", "items": {"type": "object"}},
+    "supported_within_scope": {"type": "array", "items": {"type": "object"}},
+    "accepted": {"type": "array", "items": {"type": "object"}},
+    "proposed": {"type": "array", "items": {"type": "object"}},
+    "contested": {"type": "array", "items": {"type": "object"}},
+    "stale": {"type": "array", "items": {"type": "object"}},
+    "pending_review": {"type": "array", "items": {"type": "object", "required": ["review_key", "proposal_ids"], "properties": {"review_key": {"type": "string", "minLength": 1}, "proposal_ids": {"type": "array", "items": {"type": "string", "minLength": 1}}}, "additionalProperties": false}},
+    "missing_evidence": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "failures": {"type": "array", "items": {"type": "object"}}
+  }
+}

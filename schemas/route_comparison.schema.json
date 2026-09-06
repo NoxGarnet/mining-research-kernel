@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Archived Route Comparison",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "id", "revision", "project_id", "scope", "source_refs", "question_id", "route_ids", "entries", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "RouteComparison"},
+    "id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "scope": {"type": "object", "minProperties": 1},
+    "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "question_id": {"type": "string", "minLength": 1},
+    "claim_id": {"type": ["string", "null"], "minLength": 1},
+    "route_ids": {"type": "array", "items": {"type": "string", "minLength": 1}, "minItems": 1},
+    "entries": {"type": "array", "minItems": 1},
+    "status": {"const": "archived"},
+    "stop_reason": {"type": ["string", "null"]}
+  }
+}

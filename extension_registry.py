@@ -1,123 +1,63 @@
-"""Small, explicit Extension Registry used by the read-only discovery layer.
+"""Compatibility facade for the pre-package registry API.
 
-This is deliberately a static registry: entries are registered by code, and
-implementations are resolved only from the explicitly supplied callable or
-``module:attribute`` import path.  It is not a plugin loader.
+New code should use :mod:`mining_research_kernel.registry` and the strict
+application registry in :mod:`default_extensions`.  Legacy callers retain
+their unnamespaced constructor and identifiers here only.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-import importlib
-from typing import Any, Callable
+from typing import Any
 
-ALLOWED_KINDS = frozenset({"project", "source", "tool", "knowledge"})
-ALLOWED_CAPABILITIES = frozenset({"discover", "inspect", "validate", "read_only"})
+from default_extensions import DEFAULT_REGISTRY
+from mining_research_kernel.registry import (
+    ExtensionRecord,
+    ExtensionRegistry as _ExtensionRegistry,
+    RegistryError,
+)
 
-
-class RegistryError(ValueError):
-    """Invalid registry definition or registration operation."""
-
-
-@dataclass(frozen=True)
-class ExtensionRecord:
-    extension_id: str
-    kind: str
-    capabilities: frozenset[str]
-    implementation: Callable[..., Any] | str
+_LEGACY_ALLOWED_CAPABILITIES = frozenset({"discover", "inspect", "validate", "read_only"})
+_LEGACY_ALLOWED_KINDS = frozenset({
+    "project", "source", "tool", "knowledge", "workflow",
+    "project_adapter", "workflow_pack", "documentation_provider", "source_provider",
+    "execution_provider", "knowledge_provider", "transform_provider", "cognition_policy",
+    "artifact_store", "agent_host_adapter",
+})
 
 
-class ExtensionRegistry:
-    """An ordered, explicitly populated collection of extension records."""
+class ExtensionRegistry(_ExtensionRegistry):
+    """Legacy-mode registry used only by existing callers and fixtures."""
 
-    def __init__(self, records: list[ExtensionRecord] | tuple[ExtensionRecord, ...] = ()):
-        self._records: list[ExtensionRecord] = []
-        for record in records:
-            self.register(record)
-
-    @property
-    def records(self) -> tuple[ExtensionRecord, ...]:
-        return tuple(self._records)
-
-    def register(self, record: ExtensionRecord) -> ExtensionRecord:
-        errors = self._record_errors(record)
-        if isinstance(record, ExtensionRecord) and any(r.extension_id == record.extension_id for r in self._records):
-            errors.insert(0, f"duplicate extension_id: {record.extension_id}")
-        if any(e.startswith("duplicate extension_id") for e in errors):
-            raise RegistryError(errors[0])
-        if errors:
-            raise RegistryError("; ".join(errors))
-        self._records.append(record)
-        return record
-
-    def validate(self) -> list[str]:
-        """Return stable diagnostics without mutating the registry."""
-        diagnostics: list[str] = []
-        seen: set[str] = set()
-        for record in self._records:
-            if record.extension_id in seen:
-                diagnostics.append(f"duplicate extension_id: {record.extension_id}")
-            seen.add(record.extension_id)
-            diagnostics.extend(self._record_errors(record, check_duplicate=False))
-            if not any("implementation entry" in error for error in self._record_errors(record, check_duplicate=False)):
-                try:
-                    self.resolve(record)
-                except RegistryError as exc:
-                    diagnostics.append(str(exc))
-        return diagnostics
-
-    def by_kind(self, kind: str) -> tuple[ExtensionRecord, ...]:
-        return tuple(record for record in self._records if record.kind == kind)
+    def __init__(self, records=()):
+        super().__init__(records, strict_ids=False)
 
     @staticmethod
-    def _record_errors(record: ExtensionRecord, check_duplicate: bool = True) -> list[str]:
-        errors: list[str] = []
+    def _record_errors(record, *, strict_ids=False):
+        errors = _ExtensionRegistry._record_errors(record, strict_ids=strict_ids)
         if not isinstance(record, ExtensionRecord):
-            return ["record must be an ExtensionRecord"]
-        if not isinstance(record.extension_id, str) or not record.extension_id.strip():
-            errors.append("invalid extension_id")
-        if record.kind not in ALLOWED_KINDS:
-            errors.append(f"unknown kind: {record.kind}")
+            return errors
+
+        kind_errors = [error for error in errors if error.startswith("unknown kind:")]
+        if record.extension_kind in _LEGACY_ALLOWED_KINDS:
+            kind_errors = []
+        capability_errors = []
         capabilities = record.capabilities
         if not isinstance(capabilities, (set, frozenset, tuple, list)):
-            errors.append("capabilities must be a collection")
+            capability_errors = ["capabilities must be a collection"]
         else:
-            for capability in capabilities:
-                if capability not in ALLOWED_CAPABILITIES:
-                    errors.append(f"unknown capability: {capability}")
-        implementation = record.implementation
-        valid_entry = callable(implementation)
-        if isinstance(implementation, str):
-            valid_entry = ":" in implementation and all(implementation.split(":", 1))
-        if not valid_entry:
-            errors.append("missing or invalid implementation entry")
-        return errors
-
-    @staticmethod
-    def resolve(record: ExtensionRecord) -> Callable[..., Any]:
-        implementation = record.implementation
-        if callable(implementation):
-            return implementation
-        if not isinstance(implementation, str) or ":" not in implementation:
-            raise RegistryError(f"missing or invalid implementation entry: {record.extension_id}")
-        module_name, attribute = implementation.split(":", 1)
-        try:
-            target: Any = importlib.import_module(module_name)
-            for part in attribute.split("."):
-                target = getattr(target, part)
-        except (ImportError, AttributeError) as exc:
-            raise RegistryError(f"invalid implementation entry for {record.extension_id}: {implementation}") from exc
-        if not callable(target):
-            raise RegistryError(f"invalid implementation entry for {record.extension_id}: {implementation}")
-        return target
+            capability_errors = [f"unknown capability: {capability}" for capability in capabilities
+                                 if capability not in _LEGACY_ALLOWED_CAPABILITIES]
+        implementation_errors = [error for error in errors if "implementation entry" in error]
+        other_errors = [error for error in errors
+                        if not error.startswith("unknown kind:")
+                        and not error.startswith("capabilities must be")
+                        and not error.startswith("unknown capability:")
+                        and "implementation entry" not in error]
+        return other_errors + kind_errors + capability_errors + implementation_errors
 
 
-DEFAULT_REGISTRY = ExtensionRegistry((
-    ExtensionRecord("flac3d_coal_roadway", "project", frozenset({"discover", "read_only"}), "adapters.flac3d:discover"),
-    ExtensionRecord("ceramsite_research", "project", frozenset({"discover", "read_only"}), "adapters.ceramsite:discover"),
-    ExtensionRecord("zotero_mcp_readonly", "source", frozenset({"discover", "inspect", "read_only"}), "adapters.zotero_mcp_readonly:dispatch"),
-))
-
-
-def register_extension(registry: ExtensionRegistry, **kwargs: Any) -> ExtensionRecord:
+def register_extension(registry: _ExtensionRegistry, **kwargs: Any) -> ExtensionRecord:
     """Convenience API for explicit test or application registration."""
     return registry.register(ExtensionRecord(**kwargs))
+
+
+__all__ = ["DEFAULT_REGISTRY", "ExtensionRecord", "ExtensionRegistry", "RegistryError", "register_extension"]

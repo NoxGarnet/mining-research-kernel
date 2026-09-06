@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Portable Project Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id", "domain", "product", "product_version", "entry", "baseline", "errors", "decisions", "research_map", "documentation", "execution", "verification"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+    "domain": {"type": "string", "minLength": 1},
+    "product": {"enum": ["flac3d", "synthetic"]},
+    "product_version": {"type": "string", "minLength": 1},
+    "entry": {"type": "string", "minLength": 1},
+    "baseline": {"type": "string", "minLength": 1},
+    "errors": {"type": "string", "minLength": 1},
+    "decisions": {"type": "string", "minLength": 1},
+    "research_map": {"type": "string", "minLength": 1},
+    "documentation": {"type": "object", "additionalProperties": false, "required": ["provider"], "properties": {"provider": {"type": "string", "minLength": 1}, "root": {"type": "string", "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)\\.\\.(?:/|$)).+$"}, "version": {"type": "string", "minLength": 1}, "lookup": {"type": "string", "minLength": 1}}},
+    "execution": {"type": "object", "additionalProperties": false, "required": ["provider"], "properties": {"provider": {"type": "string", "minLength": 1}}},
+    "verification": {"type": "object", "additionalProperties": false, "required": ["project_checks"], "properties": {"project_checks": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
+    "route_policy": {"type": "object", "additionalProperties": false, "properties": {"max_active_routes": {"type": "integer", "minimum": 1, "maximum": 3}}}
+  }
+}

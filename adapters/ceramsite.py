@@ -1,6 +1,6 @@
 from pathlib import Path
 import csv
-from mining_kernel import safe_path, sha256, asset
+from mining_research_kernel import asset, safe_path, sha256
 
 def discover(workspace: Path):
     files=[("projects/master_thesis_ceramsite_concrete/START.md","entry"),("projects/master_thesis_ceramsite_concrete/Tracks/research_track.yaml","track"),("projects/master_thesis_ceramsite_concrete/wenxian/source_manifest.csv","source"),("projects/master_thesis_ceramsite_concrete/wenxian/zotero_import/metadata.ris","source"),("projects/master_thesis_ceramsite_concrete/wenxian/md/references/","note")]
