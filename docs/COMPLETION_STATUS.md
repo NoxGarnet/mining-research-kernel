@@ -66,7 +66,7 @@ pre-R0 package implementation.
 | R3 | PASS WITH NOTES (synthetic/local scope) | Bounded multi-route lifecycle. |
 | R4 | PASS WITH NOTES (synthetic/local scope) | Mechanical evidence, bounded proposal admission, invalidation, local conflicts, trusted review boundary and failure reload. |
 | R5 | PASS WITH NOTES (synthetic/local scope) | Fresh-user subprocess and second-domain shared-path acceptance. |
-| R6 | 本机候选验收基本完成；R6 尚未闭合 | Four direct findings are remediated in the dirty working tree; concurrent path replacement remains a local trust-model limitation, the file-symlink test is skipped on this host, and fresh-clone/private-staging gates remain open. |
+| R6 | 本机候选验收基本完成；R6 尚未闭合 | Four direct findings are remediated in the candidate branch; fresh-clone and Private staging readback are complete, while the file-symlink test and concurrent path-replacement guarantee remain open. |
 
 Old Phase 1 proves useful initialization and interface scaffolding only.
 Old Phase 2 does not prove applicable official-document verification. Registry
