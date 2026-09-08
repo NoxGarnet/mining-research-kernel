@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Task completion request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["route_ids", "run_reference_ids", "verification_ids", "evidence_refs", "output_refs"],
+  "properties": {
+    "route_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "run_reference_ids": {"$ref": "#/$defs/route_map"},
+    "verification_ids": {"$ref": "#/$defs/route_list_map"},
+    "verification_gate_coverage": {"$ref": "#/$defs/route_gate_coverage_map"},
+    "evidence_refs": {"$ref": "#/$defs/route_list_map"},
+    "output_refs": {"$ref": "#/$defs/route_list_map"}
+  },
+  "$defs": {
+    "route_map": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "string", "minLength": 1}},
+    "route_list_map": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}},
+    "route_gate_coverage_map": {"type": "object", "minProperties": 1, "additionalProperties": {"$ref": "#/$defs/gate_map"}},
+    "gate_map": {"type": "object", "minProperties": 1, "additionalProperties": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/verification_coverage"}}},
+    "verification_coverage": {"type": "object", "additionalProperties": false, "required": ["verification_id", "verification_gate_id"], "properties": {"verification_id": {"type": "string", "minLength": 1}, "verification_gate_id": {"type": "string", "minLength": 1}}}
+  }
+}

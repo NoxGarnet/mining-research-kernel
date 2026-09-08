@@ -87,6 +87,34 @@ def _provider_capability(value: Any) -> Mapping[str, Any] | None:
     return value if isinstance(value, Mapping) else None
 
 
+def capability_status_for(workflow_pack: Mapping[str, Any], task_type: str) -> Mapping[str, Any] | None:
+    """Return the workflow-declared capability state for a task action.
+
+    Capability declarations are owned by workflow packs.  The task engine only
+    consumes their generic shape and never branches on a product or provider.
+    """
+    statuses = workflow_pack.get("capability_statuses", {})
+    if not isinstance(statuses, Mapping):
+        return None
+    for key in (task_type, _kind(task_type)):
+        value = statuses.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def unavailable_capability(status: Mapping[str, Any] | None) -> tuple[str, str] | None:
+    """Return a stable stop reason and recovery condition for an unavailable capability."""
+    if not isinstance(status, Mapping) or status.get("available") is not False:
+        return None
+    reason = status.get("reason")
+    resume = status.get("resume_condition")
+    return (
+        reason.strip() if isinstance(reason, str) and reason.strip() else "capability_unavailable",
+        resume.strip() if isinstance(resume, str) and resume.strip() else "provide an available capability",
+    )
+
+
 class TaskEngine:
     """Keep task packets and execution accounting in memory only."""
 
@@ -116,50 +144,68 @@ class TaskEngine:
                 return value
         return None
 
-    def _documentation_ok(self, request: Mapping[str, Any], task_type: str) -> tuple[bool, str | None]:
+    def _capability_assessment(self, task_type: str) -> tuple[bool, str | None, str | None]:
+        unavailable = unavailable_capability(capability_status_for(self.workflow_pack, task_type))
+        if unavailable is None:
+            return True, None, None
+        reason, resume = unavailable
+        return False, reason, resume
+
+    def _documentation_assessment(self, request: Mapping[str, Any], gates: list[str]) -> tuple[bool, str, str]:
         # This validates a result crossing the configured provider boundary;
         # it provides no signature verification or authentication.
-        if _kind(task_type) != "syntax_change":
-            return True, None
+        if "documentation" not in gates:
+            return True, "NOT_APPLICABLE", "task_does_not_require_gate"
         result = request.get("documentation_result", self.documentation_result)
         context = request.get("task_context", "production")
         if context not in {"production", "synthetic"}:
-            return False, "task_context_invalid"
+            return False, "CANNOT_VERIFY", "task_context_invalid"
         if not isinstance(result, Mapping):
-            return False, "documentation_result_required"
+            workflow_gate = self.workflow_pack.get("gate_statuses", {}).get("documentation", {})
+            if isinstance(workflow_gate, Mapping) and workflow_gate.get("status") == "CANNOT_VERIFY":
+                reason = workflow_gate.get("reason")
+                if isinstance(reason, str) and reason.strip():
+                    return False, "CANNOT_VERIFY", reason
+            return False, "CANNOT_VERIFY", "documentation_result_required"
         status = result.get("status")
         if context == "synthetic":
             expected_status, trust = "SYNTHETIC_VERIFIED", "synthetic"
         else:
             expected_status, trust = "VERIFIED", "official_local"
+        if status == "CANNOT_VERIFY":
+            reason = result.get("stop_reason")
+            return False, "CANNOT_VERIFY", reason if isinstance(reason, str) and reason.strip() else "documentation_not_verified"
         citation = result.get("citation")
         if status != expected_status or not isinstance(citation, Mapping):
-            return False, "documentation_not_verified_for_task_context"
+            return False, "CANNOT_VERIFY", "documentation_not_verified_for_task_context"
         if citation.get("status", status) != status or citation.get("trust_class") != trust:
-            return False, "documentation_citation_trust_mismatch"
+            return False, "CANNOT_VERIFY", "documentation_citation_trust_mismatch"
         if result.get("coverage_scope") != "command_name_only":
-            return False, "documentation_coverage_insufficient"
+            return False, "CANNOT_VERIFY", "documentation_coverage_insufficient"
         product = self.project.get("product", "flac3d")
         version = self.project.get("product_version", "unknown")
         source_id = citation.get("source_id")
         body_digest = citation.get("sha256_body")
         query_digest = citation.get("query_sha256")
         if not isinstance(source_id, str) or not _NAMESPACED.fullmatch(source_id):
-            return False, "documentation_source_id_invalid"
+            return False, "CANNOT_VERIFY", "documentation_source_id_invalid"
         if (not isinstance(body_digest, str) or
                 not re.fullmatch(r"[0-9a-f]{64}", body_digest)):
-            return False, "documentation_body_digest_invalid"
+            return False, "CANNOT_VERIFY", "documentation_body_digest_invalid"
         if (not isinstance(query_digest, str) or
                 not re.fullmatch(r"[0-9a-f]{64}", query_digest)):
-            return False, "documentation_query_digest_invalid"
+            return False, "CANNOT_VERIFY", "documentation_query_digest_invalid"
         if (not isinstance(citation.get("fetched_at"), str) or not citation.get("fetched_at") or
                 not isinstance(citation.get("checked_at"), str) or not citation.get("checked_at")):
-            return False, "documentation_timestamps_required"
+            return False, "CANNOT_VERIFY", "documentation_timestamps_required"
         cited_product = citation.get("product")
-        cited_version = citation.get("product_version")
-        cited_versions = {citation.get("document_family"), citation.get("document_build"), cited_version}
-        if cited_product != product or version == "unknown" or version not in cited_versions:
-            return False, "documentation_product_version_mismatch"
+        cited_product_version = citation.get("product_version")
+        cited_document_build = citation.get("document_build")
+        if (cited_product != product or version == "unknown"
+                or (cited_product_version is not None and cited_product_version != version)
+                or (cited_document_build is not None and cited_document_build != version)
+                or (cited_product_version is None and cited_document_build is None)):
+            return False, "CANNOT_VERIFY", "documentation_product_version_mismatch"
         page = request.get("topic", request.get("page", request.get("documentation_page")))
         command = _normalized_command(request.get("command"))
         cited_page = citation.get("page")
@@ -167,21 +213,25 @@ class TaskEngine:
         expected_anchor = "command:" + ".".join(command.split()) if command else None
         request_anchor = request.get("anchor")
         if request_anchor is not None and request_anchor != expected_anchor:
-            return False, "documentation_anchor_mismatch"
+            return False, "CANNOT_VERIFY", "documentation_anchor_mismatch"
         if not isinstance(page, str) or cited_page != page:
-            return False, "documentation_page_mismatch"
+            return False, "CANNOT_VERIFY", "documentation_page_mismatch"
         if cited_command is not None and _normalized_command(cited_command) != command:
-            return False, "documentation_command_mismatch"
+            return False, "CANNOT_VERIFY", "documentation_command_mismatch"
         if citation.get("anchor") != expected_anchor:
-            return False, "documentation_command_mismatch"
+            return False, "CANNOT_VERIFY", "documentation_command_mismatch"
         expected_query_digest = _query_sha256(
             product=product, product_version=version, topic=page, command=command,
             source=request.get("source"), anchor=request_anchor or expected_anchor,
             task_context=context,
         )
         if query_digest != expected_query_digest:
-            return False, "documentation_query_digest_mismatch"
-        return True, None
+            return False, "CANNOT_VERIFY", "documentation_query_digest_mismatch"
+        return True, expected_status, "documentation_verified_for_task_context"
+
+    def _documentation_ok(self, request: Mapping[str, Any], task_type: str, gates: list[str]) -> tuple[bool, str | None]:
+        ok, _status, reason = self._documentation_assessment(request, gates)
+        return ok, None if ok else reason
 
     def _action(self, packet: Mapping[str, Any], state: str, *, reason: str | None = None) -> dict[str, Any]:
         if state in _TERMINAL:
@@ -271,9 +321,27 @@ class TaskEngine:
         execution_authorized = bool(self.workflow_pack.get("execution_authorized", False))
         if execution_cap and not execution_cap.get("authorization_required", True):
             execution_authorized = True
+        workflow_gates = self.workflow_pack.get("verification_gates", self.workflow_pack.get("required_gates", []))
+        if isinstance(workflow_gates, str):
+            workflow_gates = [workflow_gates]
+        caller_gates = request.get("verification_gates", request.get("needs", []))
+        if isinstance(caller_gates, str):
+            caller_gates = [caller_gates]
+        if not isinstance(workflow_gates, (list, tuple)) or not isinstance(caller_gates, (list, tuple)):
+            raise ValueError("verification_gates must be a list")
+        gates = list(dict.fromkeys([*(gate for gate in workflow_gates if isinstance(gate, str)),
+                                    *(gate for gate in caller_gates if isinstance(gate, str))]))
         documentation_value = request.get("documentation_result", self.documentation_result)
-        documentation_status = documentation_value.get("status", "CANNOT_VERIFY") if isinstance(documentation_value, Mapping) else "CANNOT_VERIFY"
-        if kind != "syntax_change":
+        documentation_result = _copy(documentation_value) if isinstance(documentation_value, Mapping) else None
+        _documentation_ok, documentation_status, documentation_reason = self._documentation_assessment(request, gates)
+        gate_statuses = _copy(self.workflow_pack.get("gate_statuses", {}))
+        if "documentation" in gates:
+            documentation_gate = gate_statuses.setdefault("documentation", {
+                "gate_id": "documentation", "applicable": True,
+            })
+            documentation_gate.update({"applicable": True, "status": documentation_status,
+                                       "reason": documentation_reason})
+        else:
             documentation_status = "NOT_APPLICABLE"
         packet: dict[str, Any] = {
             "schema_version": 1, "type": "TaskPacket", "task_id": task_id,
@@ -282,14 +350,16 @@ class TaskEngine:
             "refs": refs, "relevant_failures": refs["failures"], "relevant_decisions": refs["decisions"],
             "relevant_cognition": refs["cognition"], "relevant_failure_refs": refs["failures"],
             "relevant_decision_refs": refs["decisions"], "relevant_cognition_refs": refs["cognition"],
-            "documentation_required": kind == "syntax_change",
+            "documentation_required": "documentation" in gates,
             "documentation_status": documentation_status,
+            "documentation_result": documentation_result,
             "citation_refs": refs["documentation"], "allowed_tools": _strings(
                 request.get("allowed_tools", self.workflow_pack.get("allowed_tools", [])), "allowed_tools"),
             "execution_authorized": execution_authorized if is_execution else False,
             "authorization_scope": _copy(requested_scope or project_scope), "routes": list(self.workflow_pack.get("routes", [])),
-            "verification_gates": list(self.workflow_pack.get("verification_gates", [])),
-            "gate_statuses": _copy(self.workflow_pack.get("gate_statuses", {})),
+            "verification_gates": list(gates),
+            "gate_statuses": gate_statuses,
+            "capability_statuses": _copy(self.workflow_pack.get("capability_statuses", {})),
             "stop_conditions": [], "prohibitions": ["real_engine", "network", "subprocess", "mutation"],
             "writeback_targets": _copy(self.workflow_pack.get("writeback_targets", {})), "max_runs": max_runs,
             "runs_used": 0, "runs_remaining": max_runs, "execution_reservations": [], "operations": {},
@@ -299,9 +369,16 @@ class TaskEngine:
         }
         packet["next_action"] = self._action(packet, "ready")
         packet["history"].append({"event": "task_started", "state": "ready"})
-        doc_ok, doc_reason = self._documentation_ok(request, task_type)
-        if not doc_ok:
-            self._blocked(packet, doc_reason or "documentation_not_verified", "provide_matching documentation citation")
+        doc_ok, doc_reason = _documentation_ok, None if _documentation_ok else documentation_reason
+        capability_ok, capability_reason, capability_resume = self._capability_assessment(task_type)
+        if not capability_ok:
+            self._blocked(packet, capability_reason or "capability_unavailable",
+                          capability_resume or "provide an available capability")
+        elif not doc_ok:
+            doc_resume = ("documentation_result_required"
+                          if doc_reason == "documentation_result_required"
+                          else "provide_matching documentation citation")
+            self._blocked(packet, doc_reason or "documentation_not_verified", doc_resume)
         elif is_execution and (not execution_cap or not execution_cap.get("available", False)):
             self._blocked(packet, "execution_provider_unavailable", "select an available fake provider")
         self._tasks[task_id] = packet

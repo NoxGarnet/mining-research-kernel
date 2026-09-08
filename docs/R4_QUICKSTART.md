@@ -4,22 +4,24 @@ R4 stores cognition proposals, reviews, mechanical observations and failures
 as project-local ResearchStore transactions. `research/core_cognition.json`
 is a disposable view.
 
-Record a fixed mechanical observation:
+After a real test or tool action has produced an observation, record that
+observation. Put the actual captured value in `observation.json` and its real
+location in `locator.json`; the placeholders below are not results to copy.
 
 ```powershell
 python mining_kernel.py cognition-observe --project-root path/to/project `
   --operation-id observe-check-1 --observation-kind structured_test `
-  --observation-json '{"passed":true}' --locator-json '{"test":"check-1"}'
+  --observation-json '@observation.json' --locator-json '@locator.json'
 ```
 
 Submit a proposal with `cognition-propose`. A located Evidence reference and a
 structured `fact_key`/`fact_value` pair are required for the narrow automatic
 `provisional` path. `requested_status` is only a request. `accepted` requires
-an injected Host review boundary through the Python API; the CLI has no such
-boundary and therefore fails closed. The lower-level ResearchStore also
+a trusted Host review boundary through the Python API; the CLI has no complete
+promotion path and therefore fails closed. The lower-level ResearchStore also
 rejects an accepted proposal unless the same transaction contains the review
-record and typed review provenance; this is a write contract, not an
-authentication service.
+record and typed review provenance. Free-text interpretation cannot become
+authority automatically, and the Cognition view is rebuildable from records.
 
 Rebuild the view, optionally filtering failures by route, task, object or
 product version:

@@ -22,7 +22,8 @@
     "relevant_decision_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "relevant_cognition_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "documentation_required": {"type": "boolean"},
-    "documentation_status": {"enum": ["VERIFIED", "CANNOT_VERIFY", "NOT_APPLICABLE"]},
+    "documentation_status": {"enum": ["VERIFIED", "SYNTHETIC_VERIFIED", "CANNOT_VERIFY", "NOT_APPLICABLE"]},
+    "documentation_result": {"type": ["object", "null"]},
     "citation_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "allowed_tools": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "execution_authorized": {"type": "boolean"},
@@ -30,6 +31,7 @@
     "routes": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "verification_gates": {"type": "array", "items": {"type": "string", "minLength": 1}},
     "gate_statuses": {"type": "object"},
+    "capability_statuses": {"type": "object", "additionalProperties": {"type": "object", "required": ["capability_id", "available", "state", "reason", "resume_condition", "scope"], "properties": {"capability_id": {"type": "string", "minLength": 1}, "available": {"type": "boolean"}, "state": {"type": "string", "minLength": 1}, "reason": {"type": "string", "minLength": 1}, "resume_condition": {"type": "string", "minLength": 1}, "scope": {"type": "string", "minLength": 1}}, "additionalProperties": true}},
     "stop_conditions": {"type": "array", "items": {"type": ["string", "object"]}},
     "stop_reason": {"type": ["string", "null"], "minLength": 1},
     "resume_condition": {"type": ["string", "null"], "minLength": 1},
@@ -46,6 +48,10 @@
     "input": {},
     "history": {"type": "array", "items": {"type": "object"}},
     "next_action": {"type": "object"},
+    "historical_next_action": {"type": ["object", "null"]},
+    "historical_capability_statuses": {"type": "object"},
+    "current_capability_statuses": {"type": "object"},
+    "current_next_action": {"type": "object"},
     "last_reservation": {"type": "object"},
     "last_run": {"type": "object"}
   }

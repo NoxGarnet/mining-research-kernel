@@ -774,6 +774,97 @@ class ResearchStore:
             return None
         return copy.deepcopy(latest)
 
+    def register_local_material(
+        self,
+        path: str | os.PathLike[str],
+        material_kind: str,
+        *,
+        citation_locator: dict[str, Any] | None = None,
+        source_refs: list[str] | None = None,
+        source_documents_claim: str | None = None,
+    ) -> dict[str, Any]:
+        """Register caller-selected local material without copying its bytes.
+
+        The source is read once for its digest and is never written.  Absolute
+        paths are allowed only as explicit caller input; persisted locators
+        expose a project-relative path or a controlled caller label.
+        """
+        if material_kind not in {"primary/original", "project_record", "derived_reading_note"}:
+            raise ResearchStoreError("material_kind is unsupported")
+        raw = Path(path).expanduser()
+        explicit_external = raw.is_absolute()
+        if not explicit_external and (".." in raw.parts or str(raw).startswith(("/", "\\"))):
+            raise ResearchStoreError("relative material path escapes project root")
+        resolved = raw.resolve() if explicit_external else (self.project_root / raw).resolve()
+        if not explicit_external:
+            try:
+                locator_path = resolved.relative_to(self.project_root).as_posix()
+            except ValueError as exc:
+                raise ResearchStoreError("relative material path resolves outside project root") from exc
+        else:
+            try:
+                locator_path = resolved.relative_to(self.project_root).as_posix()
+            except ValueError:
+                locator_path = f"caller:{resolved.name}"
+        if not resolved.is_file():
+            raise ResearchStoreError("material path must be an existing file")
+        digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        authority = "derived" if material_kind == "derived_reading_note" else "authoritative"
+        identity = f"{self.project_id}|{material_kind}|{digest}"
+        suffix = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:24]
+        asset_id = f"asset.local.{suffix}"
+        evidence_id = f"evidence.local.{suffix}"
+        refs = list(source_refs or [])
+        if not all(_is_nonempty_string(item) for item in refs):
+            raise ResearchStoreError("source_refs entries must be non-empty strings")
+        refs = list(dict.fromkeys([*refs, f"asset:{asset_id}"]))
+        # Persist only a project-relative path or a controlled caller label;
+        # never expose an external absolute path in the record.
+        locator = {"path": locator_path,
+                   "path_kind": "project_relative" if not locator_path.startswith("caller:") else "caller_label"}
+        if citation_locator is not None:
+            if not isinstance(citation_locator, dict) or not citation_locator:
+                raise ResearchStoreError("citation_locator must be a non-empty object")
+            locator["citation"] = copy.deepcopy(citation_locator)
+        asset = {
+            "schema_version": SCHEMA_VERSION, "type": "Asset", "id": asset_id,
+            "revision": 1, "project_id": self.project_id,
+            "scope": {"project_id": self.project_id}, "source_refs": refs,
+            "asset_kind": material_kind, "locator": locator,
+            "content_sha256": digest, "authority": authority, "status": "observed",
+        }
+        evidence = {
+            "schema_version": SCHEMA_VERSION, "type": "Evidence", "id": evidence_id,
+            "revision": 1, "project_id": self.project_id,
+            "scope": {"project_id": self.project_id}, "source_refs": refs,
+            "evidence_kind": material_kind, "asset_ref": asset_id,
+            "locator": copy.deepcopy(locator), "status": "observed",
+        }
+        relations = [{
+            "schema_version": SCHEMA_VERSION, "relationship_id": f"relation.local.{suffix}",
+            "revision": 1, "project_id": self.project_id,
+            "relation": "evidence_derived_from_asset", "from_id": evidence_id,
+            "from_revision": 1, "to_id": asset_id, "to_revision": 1,
+            "source_refs": refs,
+        }]
+        if source_documents_claim is not None:
+            claim = self.latest_record(source_documents_claim, "Claim")
+            if claim is None:
+                raise ResearchStoreError("source_documents_claim must reference an existing Claim")
+            relations.append({
+                "schema_version": SCHEMA_VERSION, "relationship_id": f"relation.local.{suffix}.claim",
+                "revision": 1, "project_id": self.project_id,
+                "relation": "source_documents_claim", "from_id": evidence_id,
+                "from_revision": 1, "to_id": claim["id"], "to_revision": claim["revision"],
+                "source_refs": refs,
+            })
+        transaction = self.commit(
+            f"register-local-material.{suffix}", {"role": "planning_agent", "model": "research-store"},
+            [asset, evidence], relations,
+        )
+        return {"asset": copy.deepcopy(asset), "evidence": copy.deepcopy(evidence),
+                "relationships": copy.deepcopy(relations), "transaction": transaction}
+
     def _latest(self, transactions: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         records = self._latest_record_map(transactions)
         relationships: dict[str, dict[str, Any]] = {}

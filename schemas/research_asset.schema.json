@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Research Asset Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "type", "id", "revision", "project_id", "scope", "source_refs", "asset_kind", "locator", "content_sha256", "authority", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "Asset"},
+    "id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "scope": {"type": "object", "minProperties": 1},
+    "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "asset_kind": {"type": "string", "minLength": 1},
+    "locator": {"type": "object", "minProperties": 1},
+    "content_sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$"},
+    "authority": {"enum": ["authoritative", "derived"]},
+    "status": {"type": "string", "minLength": 1}
+  }
+}

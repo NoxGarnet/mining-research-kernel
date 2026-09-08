@@ -9,6 +9,11 @@ The R2 example uses a synthetic fake executor. It demonstrates state,
 provenance and recovery mechanics. It does not run FLAC3D and does not prove
 numerical, physical or engineering validity.
 
+The production FLAC3D `static_check` action is currently unimplemented. Its
+gate remains applicable and `PENDING`, while a new production task is blocked
+with `static_check_unimplemented`. Synthetic fixture tasks use their declared
+synthetic capability and remain runnable.
+
 ## Start a task
 
 Create an initialized project first:
@@ -90,11 +95,27 @@ proposed Claim, with a source locator and no automatic scientific conclusion.
 python mining_kernel.py research-map-rebuild --project-root path/to/project
 ```
 
-The map is rebuilt from immutable transactions. It contains the question,
+The CLI command writes the rebuilt map to the project's configured map path
+(normally `research/map.json`) and returns the same `nodes`/`edges` view. The
+map is rebuilt from immutable transactions. It contains the question,
 claim, route, assets, evidence, run reference and verification relationships.
 Deleting the configured derived map and running the command again reproduces
 the same content. TaskState is persisted but intentionally excluded from the
 research graph view.
+
+The lower-level Python call `ResearchStore.rebuild_research_map()` keeps a
+pure in-memory return when called without an output path; pass a relative path
+when a library caller wants to persist a non-default view.
+
+## Register a local material
+
+Use the public `ResearchStore.register_local_material` method or the matching
+CLI for an explicitly selected file. Choose `primary/original`,
+`project_record`, or `derived_reading_note`. The method creates stable hashed
+Asset/Evidence records and their `evidence_derived_from_asset` relationship;
+an optional existing Claim can receive a `source_documents_claim` edge. A
+derived reading note is always recorded as derived. The records preserve
+provenance and do not establish scientific or engineering validity.
 
 The SDK-free example performs the same calls directly:
 
@@ -111,4 +132,5 @@ transactions are recovered without silently stealing a live lock.
 
 The real Itasca HTML reader remains an independent R1 capability. R2 does not
 turn a fake result into an FLAC3D result, and it does not enable `itasca-mcp`.
-Real Zotero access and live Itasca execution remain outside this release stage.
+Real Zotero access, the production FLAC3D `static_check` implementation and
+live Itasca execution remain outside this release stage.

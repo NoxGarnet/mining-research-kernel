@@ -73,6 +73,16 @@ def build_synthetic_workflow_pack(project=None, request=None, providers=None, **
                      "fake_execution": ["execution.fake"],
                      "execution": ["execution"]}.get(kind, [])
     requested_tools = request.get("allowed_tools", default_tools)
+    capability_statuses = {
+        "static_check": {
+            "capability_id": "mining_research_kernel.method.synthetic.static_check",
+            "available": True,
+            "state": "synthetic_fixture",
+            "reason": "synthetic_fixture_available",
+            "resume_condition": "synthetic fixture implementation is available",
+            "scope": "synthetic",
+        },
+    }
     return {
         "schema_version": 1,
         "type": "SyntheticWorkflowPack",
@@ -92,6 +102,7 @@ def build_synthetic_workflow_pack(project=None, request=None, providers=None, **
         "verification_gates": list(selected),
         "gate_statuses": statuses,
         "gates": statuses,
+        "capability_statuses": capability_statuses,
         "routes": list(route_ids),
         "documentation_required": False,
         "documentation_status": "NOT_APPLICABLE",

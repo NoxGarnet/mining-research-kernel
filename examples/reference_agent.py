@@ -13,7 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from mining_research_kernel.r2_workflow import research_map_rebuild, task_run_fake, task_start
+from mining_research_kernel.r2_workflow import (
+    research_map_rebuild, task_inspect, task_run_fake, task_start,
+)
 
 
 def main(argv=None) -> int:
@@ -35,8 +37,10 @@ def main(argv=None) -> int:
     }
     packet = task_start(args.project_root, request)
     run = task_run_fake(args.project_root, args.task_id, "reference-run", args.fixture_id)
+    final_task = task_inspect(args.project_root, args.task_id)
     view = research_map_rebuild(args.project_root)
-    print(json.dumps({"task_packet": packet, "fake_run": run, "research_map": view},
+    print(json.dumps({"initial_task_packet": packet, "fake_run": run,
+                      "final_task": final_task, "research_map": view},
                      ensure_ascii=False, sort_keys=True))
     return 0
 

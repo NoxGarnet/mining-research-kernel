@@ -110,6 +110,18 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
         "execution": ["execution"],
     }.get(kind, [])
     requested_tools = request.get("allowed_tools", default_tools)
+    synthetic_context = request.get("task_context", "production") == "synthetic"
+    capability_statuses = {
+        "static_check": {
+            "capability_id": "mining_research_kernel.method.flac3d.static_check",
+            "available": synthetic_context,
+            "state": "synthetic_fixture" if synthetic_context else "unimplemented",
+            "reason": "synthetic_fixture_available" if synthetic_context else "static_check_unimplemented",
+            "resume_condition": ("use a production FLAC3D static_check only after a real implementation is provided "
+                                  "or registered"),
+            "scope": "synthetic" if synthetic_context else "production",
+        },
+    }
     return {
         "schema_version": 1,
         "type": "FLAC3DWorkflowPack",
@@ -130,6 +142,7 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
         "verification_gates": list(selected),
         "gate_statuses": statuses,
         "gates": statuses,
+        "capability_statuses": capability_statuses,
         "routes": list(route_ids),
         "documentation_required": "documentation" in selected,
         "documentation_status": request.get("documentation_status", "NOT_APPLICABLE"),

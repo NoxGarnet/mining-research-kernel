@@ -95,8 +95,10 @@ def main(argv=None):
     rv = sub.add_parser("run-validate"); rv.add_argument("--runs-root", required=True); rv.add_argument("run_id")
     ts = sub.add_parser("task-start"); ts.add_argument("--project-root", required=True); ts.add_argument("--request-json", required=True); ts.add_argument("--documentation-result")
     ti = sub.add_parser("task-inspect"); ti.add_argument("--project-root", required=True); ti.add_argument("task_id")
+    tc = sub.add_parser("task-complete"); tc.add_argument("--project-root", required=True); tc.add_argument("task_id"); tc.add_argument("--operation-id", required=True); tc.add_argument("--completion-json", required=True)
     tf = sub.add_parser("task-run-fake"); tf.add_argument("--project-root", required=True); tf.add_argument("task_id"); tf.add_argument("--operation-id", required=True); tf.add_argument("--fixture-id", required=True)
     rm = sub.add_parser("research-map-rebuild"); rm.add_argument("--project-root", required=True); rm.add_argument("--output")
+    am = sub.add_parser("register-local-material"); am.add_argument("--project-root", required=True); am.add_argument("path"); am.add_argument("--material-kind", required=True, choices=("primary/original", "project_record", "derived_reading_note")); am.add_argument("--citation-locator"); am.add_argument("--source-ref", action="append", default=[]); am.add_argument("--source-documents-claim")
     rp = sub.add_parser("route-propose"); rp.add_argument("--project-root", required=True); rp.add_argument("--route-json", required=True); rp.add_argument("--operation-id", required=True)
     ri3 = sub.add_parser("route-inspect"); ri3.add_argument("--project-root", required=True); ri3.add_argument("route_id")
     rr3 = sub.add_parser("route-reserve"); rr3.add_argument("--project-root", required=True); rr3.add_argument("route_id"); rr3.add_argument("--operation-id", required=True)
@@ -118,12 +120,23 @@ def main(argv=None):
     elif args.command == "task-inspect":
         from mining_research_kernel.r2_workflow import task_inspect
         out = task_inspect(args.project_root, args.task_id)
+    elif args.command == "task-complete":
+        from mining_research_kernel.r2_workflow import load_json_value, task_complete
+        out = task_complete(args.project_root, args.task_id, args.operation_id,
+                            load_json_value(args.completion_json, "completion-json"))
     elif args.command == "task-run-fake":
         from mining_research_kernel.r2_workflow import task_run_fake
         out = task_run_fake(args.project_root, args.task_id, args.operation_id, args.fixture_id)
     elif args.command == "research-map-rebuild":
         from mining_research_kernel.r2_workflow import research_map_rebuild
         out = research_map_rebuild(args.project_root, args.output)
+    elif args.command == "register-local-material":
+        from mining_research_kernel.r2_workflow import load_json_value
+        from mining_research_kernel.records import ResearchStore
+        locator = None if args.citation_locator is None else load_json_value(args.citation_locator, "citation-locator")
+        out = ResearchStore(args.project_root).register_local_material(
+            args.path, args.material_kind, citation_locator=locator,
+            source_refs=args.source_ref, source_documents_claim=args.source_documents_claim)
     elif args.command in {"route-propose", "route-inspect", "route-reserve", "route-finish", "route-reopen", "route-reject", "route-supersede", "route-compare"}:
         from mining_research_kernel.routes import RouteLifecycle
         from mining_research_kernel.r2_workflow import load_json_value

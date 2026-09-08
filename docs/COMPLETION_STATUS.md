@@ -1,5 +1,42 @@
 # v0.1.0 Completion Status
 
+## Current candidate state — 2026-09-07
+
+The current working tree is the code baseline
+`72a2d6bcb80d6136c27d2aca61a0ce890f9ab9fd` plus uncommitted publication
+material and reference-example edits. The code baseline is locally accepted at the
+bounded scope recorded in [ACCEPTANCE_SUMMARY.md](ACCEPTANCE_SUMMARY.md): 200
+tests run, 199 passed and 1 file-symlink test skipped; 10/10 applicable README
+commands succeeded; 19 schema files parsed; and 2 representative
+TaskPacket/inspect outputs passed runtime schema validation.
+
+The runtime-only public examples use Python standard-library facilities. The
+complete tests and Draft 2020-12 checks require `jsonschema==4.26.0`; Python
+3.14.2 on Windows is the only exercised interpreter environment. No lower
+Python support bound is claimed.
+
+Current capability boundary:
+
+- Real kernel mechanisms include ResearchStore, TaskState, routes, Run Ledger,
+  Evidence/Verification, Research Map, Cognition views and completion checks.
+- Synthetic behavior includes fixture projects, deterministic fake execution
+  and synthetic static checking.
+- User-provided resources include version-matched Itasca local documentation,
+  source registration, sanitized Zotero snapshots and caller-injected
+  read-only Zotero readers.
+- Production FLAC3D `static_check`, real FLAC3D execution and a complete
+  `itasca-mcp` integration remain unimplemented.
+
+Remaining matters are separate: the file-symlink test lacks platform coverage;
+the original R8 two-gate task remains incomplete; no scientific or engineering
+validity is claimed; and the candidate has not been pushed or published.
+Historical Private staging evidence applies to its own earlier commit and does
+not represent remote acceptance of this baseline. This round did not rerun the
+complete baseline suite after these documentation and example edits.
+
+The technical acceptance result, the platform coverage gap and the unexecuted
+publication decisions are intentionally reported as separate facts.
+
 This file records local completion evidence for the revised v0.1.0 scope.
 The 2026-09-05 revision supersedes the old Phase 1/2 acceptance interpretation.
 Design decisions and implementation boundaries are in
@@ -56,9 +93,9 @@ pre-R0 package implementation.
 - Git boundary: local uncommitted changes only; no commit, push, visibility
   change, tag, or Release.
 
-## Current revised gates
+## Historical revised gate snapshot (prior acceptance records)
 
-| Gate | Current status | Meaning |
+| Gate | Recorded status | Meaning |
 |---|---|---|
 | R0 | PASS (bounded scope) | Type-dispatch fix, contract decisions and independent local checks complete. |
 | R1 | PASS (local command-name scope) | Registered local HTML reader and CLI verified; real filesystem-link escape covered on Windows. |
@@ -66,7 +103,77 @@ pre-R0 package implementation.
 | R3 | PASS WITH NOTES (synthetic/local scope) | Bounded multi-route lifecycle. |
 | R4 | PASS WITH NOTES (synthetic/local scope) | Mechanical evidence, bounded proposal admission, invalidation, local conflicts, trusted review boundary and failure reload. |
 | R5 | PASS WITH NOTES (synthetic/local scope) | Fresh-user subprocess and second-domain shared-path acceptance. |
-| R6 | 本机候选验收基本完成；R6 尚未闭合 | Four direct findings are remediated in the candidate branch; fresh-clone and Private staging readback are complete, while the file-symlink test and concurrent path-replacement guarantee remain open. |
+| R6 | 本机候选验收基本完成；R6 尚未闭合 | Four direct findings are remediated in the candidate branch; fresh-clone and Private staging readback are complete. The file-symlink test/validation scope remains open; same-filesystem malicious parent replacement is outside the v0.1.0 goal and is not an open release blocker. |
+
+## Historical scope decision, 2026-09-06
+
+The v0.1.0 trust boundary is a user-controlled, single-user local deployment
+with a bounded API. External documents and Agent proposals remain untrusted
+evidence, not commands or authority. Required controls still cover accidental
+project overwrite and out-of-scope paths, legitimate explicit caller output
+directories, atomic and recoverable persistence, evidence provenance, scoped
+execution authorization, and cognition review; metadata alone is not proof and
+Core Cognition cannot self-promote.
+
+The product research loop does not include a malicious process that already
+has arbitrary same-filesystem permission to edit files/configuration or race-
+swap parent directories. Isolated hostile execution, multi-tenant services,
+authentication services and privileged execution are also outside this scope.
+The absence of a guarantee against that actor is not a v0.1.0 release defect
+and does not claim a fix. This exclusion does not suppress ordinary CLI/API
+boundary violations, untrusted-input behavior, accidental evidence corruption,
+unintended writes, or credential/privacy leaks. Re-evaluate the boundary if
+remote, multi-tenant or privileged execution is added.
+
+At that historical point, the remaining R6 gate was the file-symlink
+test/validation scope. The
+latest historical run remains 172 tests run, 171 passed and 1 skipped; the
+skipped file-symlink case is not automatically waived and does not support a
+fully verified claim. Future support or testing of that case is an explicit
+decision and does not require creating an OS sandbox. The next step is a small
+research-workflow usability trial in a separate user task; publication remains
+a separate decision.
+
+The fixed `0dafaa4` candidate and `e7e1d0a` clean-clone/staging evidence remain
+historical acceptance evidence. These documentation edits are local and
+uncommitted; they were not pushed or tested remotely.
+
+## R8 task completion operation, 2026-09-07
+
+The candidate now exposes `task-complete` and `task_complete(...)`. The
+operation accepts no caller-provided state; it requires an explicit completion
+payload covering every route in the current Task Packet. It checks current
+Route ownership and `completed` status, RunReference provenance and
+`run_executes_route`, an accepted and valid Run Ledger, PASS/PASS_WITH_NOTES
+Verification and `verification_checks_run`, and recorded output/Evidence
+references. At least one Evidence reference per route must come from the
+selected Run; source Evidence may also be included when it documents the
+Route's target Claim. Extra current Route records for the Task cause a closed
+request to be rejected, which is the conservative multi-route rule while the
+packet has no required/optional route field.
+
+Success appends one TaskState revision with an operation result and a
+non-executable `next_action`; it preserves packet budgets, `runs_used`, Route,
+RunReference, Run, Verification, Evidence, and Cognition records. Repeating an
+operation ID with the same normalized references is idempotent; changing its
+content is an operation conflict. The operation means that the declared
+research scope is complete. It does not change Core Cognition or upgrade
+command-name-only documentation into parameter, script, numerical, physical,
+engineering, or real FLAC3D validation.
+
+Focused acceptance covered 5 task-completion tests: valid persistence and
+second-process recovery, missing/unlinked evidence and verification, an
+unfinished required route, an additional unfinished route in the same Task
+Packet, operation idempotence/conflict, and completion schema parsing. The
+real R8 close was
+performed in a new derived work directory using the existing Route, accepted
+Run Ledger, RunReference, PASS_WITH_NOTES Verification, and recorded research
+outputs; the old trial and close JSON remain byte-preserved.
+
+The historical final acceptance counts are focused task-completion tests 5/5
+and full regression 190 tests, 189 passed, 1 skipped, 0 failures/errors. The
+single skip is the platform file symlink case. These are the historical R8
+acceptance results for that dated record.
 
 Old Phase 1 proves useful initialization and interface scaffolding only.
 Old Phase 2 does not prove applicable official-document verification. Registry
@@ -401,12 +508,12 @@ Validation on 2026-09-06 is recorded by layer:
 - Python compilation passed and `git diff --check` passed with only existing
   line-ending warnings.
 
-The independent remediation review identified a remaining concurrency
-limitation: directory validation and final path replacement are rechecked and
-the temporary handle is checked, but a hostile concurrent parent replacement
-cannot be fully eliminated by the current cross-platform path API. This
-remains a release qualification limitation rather than an accepted security
-guarantee.
+The independent remediation review recorded a concurrency limitation: directory
+validation and final path replacement are rechecked and the temporary handle
+is checked, but a hostile concurrent parent replacement cannot be fully
+eliminated by the current cross-platform path API. The 2026-09-06 scope
+decision supersedes its status as a v0.1.0 release qualification blocker; the
+historical observation and its test evidence remain unchanged.
 
 The README example `python -B mining_kernel.py --workspace
 examples/synthetic_workspace validate` returned zero and reported no errors for
@@ -433,9 +540,10 @@ completed below.
 The recheck confirms that the four original direct R6 paths are closed under
 the current local trust boundary. A hostile concurrent replacement of an
 output parent directory remains a documented residual limitation of the
-cross-platform path API. The repository has no source-backed remote service,
-cross-tenant ingress or privilege boundary for that scenario, so it is not
-reported as a remote security finding.
+cross-platform path API, but the 2026-09-06 scope decision excludes that
+same-filesystem malicious-actor guarantee from v0.1.0 goals and blockers. The
+repository has no source-backed remote service, cross-tenant ingress or
+privilege boundary for that scenario.
 
 Final local acceptance counts remain: 172 tests run, 171 passed, 1 skipped;
 16 schema documents parsed; 10 representative generated or fixture outputs
@@ -459,7 +567,214 @@ validate all returned successfully, with the synthetic validate command
 reporting three fixtures without errors. The ten representative generated or
 fixture outputs again passed formal Draft 2020-12 validation.
 
-The only remaining R6 qualification items are the unavailable file-symlink
-capability and the documented hostile concurrent parent-replacement limit.
-Public visibility, tag and Release decisions remain separate and were not
-performed.
+The only remaining R6 qualification item is the unavailable file-symlink
+capability and its explicit testing/validation scope. Public visibility, tag
+and Release decisions remain separate and were not performed.
+
+## R7 focused correction, 2026-09-06
+
+The real local-material trial exposed three usability defects. The candidate
+now unions workflow-required and caller-requested documentation gates, so an
+explicit documentation gate blocks a static-check task when no verified
+version-bound result is supplied; ordinary tasks without that gate remain
+unblocked. Production self-filled or synthetic documentation results do not
+pass this gate.
+
+`ResearchStore.register_local_material` and the matching CLI create stable
+hashed Asset/Evidence records and their provenance edge for an explicitly
+selected file. The material kind fixes the authority mapping, with
+`derived_reading_note` always recorded as derived. Exact repeated requests are
+idempotent and changed citation/Claim metadata is an explicit conflict.
+Relative paths resolving outside the project are rejected; explicit external
+absolute paths are stored as caller labels without copying source bytes.
+
+The CLI `research-map-rebuild` now persists the configured map path by default;
+the lower-level store call with `output=None` remains an in-memory pure view.
+
+Targeted correction tests pass: documentation gate 5/5 and local material/Map
+tests 4/4, alongside the directly affected R2 tests 25/25. The complete
+standard-library regression reports 181 run, 180 passed and 1 skipped; the
+skipped case remains the unavailable file-symlink runtime test. All 18 schema
+documents parse, and 18/18 actual R7 task, map, cognition, route, failure,
+proposal, Asset and Evidence outputs pass their applicable Draft 2020-12
+schemas. Asset/Evidence also pass the ResearchStore runtime contract.
+
+The final isolated trial is preserved in private acceptance evidence excluded
+from distribution. It registered the same five authorized materials through
+the new CLI, persisted the default Map
+with 17 nodes and 21 edges, and recovered a blocked task, pending proposal and
+failure gate in a second process. A preliminary trial with task budget 1
+correctly blocked its second route; the final trial declared budget 2 so the
+two bounded routes could be exercised without resetting budget. No FLAC3D,
+real Zotero, installation, commit, push, tag, Release or visibility action is
+part of R7.
+
+## R8 Task lifecycle close audit, 2026-09-07
+
+The R8 documentation trial's TaskPacket has top-level
+`documentation_status=VERIFIED`, consistent with its applicable documentation
+gate also being `VERIFIED`. The original source check remains preserved for
+registered Itasca local FLAC3D 9.6.44 documentation: the source is the
+registered `zone.list` page, and its coverage remains `command_name_only`.
+The profile is the keyword hierarchy within that registered page; it is not a
+separate page registration.
+
+The actual read-only documentation Run is accepted and valid, its
+RunReference is completed, and the documentation Verification is
+`PASS_WITH_NOTES`. The covered scope is source registration, the command-name
+gate, page reading and provenance. The R8 route is completed with one run;
+the Map and Core views rebuild consistently. `command_name_only` does not
+verify the complete profile parameter grammar, parameter combinations, full
+scripts or engineering use.
+
+The new R8 trial records Task `ready`, Route `completed`, Run `accepted`,
+Verification `PASS_WITH_NOTES`, Cognition `pending_review`, and an independent
+second-process recovery that reads the latest persisted state. The initial
+Task snapshot and current state are unchanged: the existing Task API still
+advertises a runnable `static_check`, while the completed documentation route
+has no effective next run. `RouteLifecycle.finish` can close a Route, but no
+public persisted production-documentation Task close operation exists;
+therefore the lifecycle verdict is `CANNOT_CLOSE_WITH_EXISTING_TASK_API`.
+This round records the minimal missing Task close operation and does not
+promote Route completion to parent Task completion.
+
+The previously reported full regression result of 185 passed and 1 skipped is
+historical evidence only; this round did not rerun the full suite and does not
+count 185/1 as a new test result. Close-only JSON, Task/Route/Run/Verification,
+Map/Core and independent-recovery checks passed, with the old R8 trial files
+left unchanged. Engineering, numerical, physical and real FLAC3D execution
+remain outside this documentation result and unverified.
+
+## R8 task-complete gate coverage correction, 2026-09-07
+
+The completion boundary now derives the required gates from the current
+persisted TaskPacket requirements and gate-status applicability. A completion
+request must provide `verification_gate_coverage` for every current Route and
+every applicable gate; its per-route `verification_ids` must exactly match the
+coverage references. Each current Verification must still be PASS or
+PASS_WITH_NOTES, belong to the project and task/route/run provenance, and be
+linked to the selected RunReference. The operation result records each packet
+gate alongside the referenced Verification ID, revision and record `gate_id`.
+The packet gate, Verification record `gate_id` and redundant
+`verification_gate_id` must be identical; `documentation_research` therefore
+cannot qualify for the packet gate `documentation`.
+
+Pending, failed or CANNOT_VERIFY packet snapshots are not permanent blockers:
+a later current valid Verification can resolve the declared gate. A current
+applicable gate without such coverage remains blocking. Engineering,
+numerical, physical and real-FLAC3D gates marked NOT_APPLICABLE remain outside
+the required set, and cannot be bypassed by relabeling an applicable gate.
+Task idempotency/conflict behavior, multi-route closure rules, completed-task
+non-executability, Run/Evidence/Route relations and Cognition persistence are
+unchanged. Synthetic fixture tests document the contract separately from the
+real R8 documentation records.
+
+Targeted completion acceptance is 9/9 tests. The one complete regression after
+the targeted pass is 194 tests run, 193 passed, 1 skipped and 0 failed; the
+skip is the existing platform file-symlink case. The three affected schemas
+(`task_completion`, `task_packet` and `verification`) each pass schema parse,
+and separate runtime output validation passes for the new R8 operation.
+
+The independent R8 derivative is preserved in private acceptance evidence
+excluded from distribution. It starts from a ready TaskState revision 1 and
+records the new operation
+`task-complete-r8-gatefix-20260907-luna-20260907`, producing TaskState revision
+2 with `next_action.executable=false`. Its documentation coverage points to
+the existing `verification-r8-documentation-research` revision 1
+`PASS_WITH_NOTES` record and preserves its `documentation_research` gate ID.
+The independent recovery artifact confirms the completed Task, completed
+Route, completed RunReference, unchanged Verification/Cognition boundaries
+and seven total transactions. The old R8 trial and old task-close directory
+were not written or used for idempotent completion.
+
+## R8 strict Verification gate-id correction, 2026-09-07
+
+Completion gate qualification is now strict: the packet gate key, the
+current Verification record's `gate_id`, and the request's redundant
+`verification_gate_id` must be identical. A Verification with
+`gate_id=static_check` or `gate_id=documentation_research` is rejected when
+the packet requires `documentation`, and the failed operation appends no
+TaskState completion revision.
+
+The new independent derivative is preserved in private acceptance evidence
+excluded from distribution. It retains the existing
+`verification-r8-documentation-research` record and
+uses `ResearchStore.commit` to add the real
+`verification-r8-documentation-gateid-strict` record with
+`gate_id=documentation`, `PASS_WITH_NOTES`, scope/source references to the
+actual `zone.list` page reading and source evidence, and a
+`verification_checks_run` relation to the existing RunReference. The new
+operation `task-complete-r8-gateid-strict-20260907-luna-20260907` appends
+TaskState revision 2 from ready revision 1. Independent recovery confirms the
+completed Task, non-executable next action, unchanged Route/RunReference and
+Cognition, and the preserved old Verification.
+
+Strict targeted acceptance is 10/10. The final complete regression after that
+targeted pass is 195 tests run, 194 passed, 1 skipped and 0 failed. The skip
+is the existing platform file-symlink case. Affected schema parse is 3/3 and
+strict trial artifact JSON parse is 4/4; runtime output validation and
+`git diff --check` pass. The old trial, old task-close and previous gatefix
+derivative remain preserved and no commit, push, tag, Release, Public,
+FLAC3D, Zotero, install or Host operation was performed.
+
+## R8 original-scope supplemental acceptance, 2026-09-07
+
+The original R8 Task Packet was independently derived with both applicable
+gates, `documentation` and `static_check`, from ready TaskState revision 1.
+It is distinct from the strict documentation-only derivative, whose
+`static_check` gate was `NOT_APPLICABLE` and therefore cannot establish this
+original scope.
+
+The current FLAC3D workflow defines `static_check` as the
+`mining_research_kernel.method.flac3d.static_check` method with a Task action
+that expects a structured Run observation over the declared project entry and
+baseline. The workflow API probe returned 0, but the method is absent from the
+registered extension set; the CLI probe `python mining_kernel.py static_check
+--help` returned 2 because no such command exists. The trace is in the new
+derivative's `research/static_check/static_check_probe.json` and
+`cli_probe.txt`; the gate remains `CANNOT_VERIFY`.
+
+The supplemental records are
+`verification-r8-original-scope-documentation` with `gate_id=documentation`
+and status `PASS_WITH_NOTES`, limited to the registered FLAC3D 9.6.44
+`zone.list` page, original query, source evidence and `command_name_only`, and
+`verification-r8-original-scope-static-check` with `gate_id=static_check` and
+status `CANNOT_VERIFY`. The earlier
+`verification-r8-documentation-research` record and its history remain
+unchanged.
+
+The new completion operation
+`task-complete-r8-original-scope-20260907-luna` returned 2 and was rejected
+because the static gate was not a passing Verification. No completion
+operation transaction or TaskState revision 2 was appended; independent
+recovery reads TaskState revision 1, `ready`, with an executable static-check
+next action. Engineering, numerical and physical validation, and real FLAC3D
+execution are outside this documentation research scope and remain
+unverified; they are not represented as required by this document gate. This
+round did not rerun the full test suite and does not alter historical test
+numbers.
+
+## Historical v0.1.0 candidate boundary (72a2d6b code baseline)
+
+The 72a2d6b code baseline kept the FLAC3D `static_check` gate applicable and
+unfinished. The workflow declared its capability as `available=false`, with
+the stable reason `static_check_unimplemented` and a recovery condition to
+provide or register a real implementation. A new production FLAC3D
+`static_check` task is therefore `blocked`, its `next_action.executable` is
+`false`, and its `gate_statuses.static_check` remains `applicable=true` and
+`status=PENDING`. No checker, parser, scheduler or framework was added.
+
+The generic TaskEngine consumes workflow-declared capability status and does
+not contain a FLAC3D product branch. The synthetic workflow declares its
+fixture `static_check` capability available, so synthetic static tasks and
+documentation-only tasks continue to work. A current `task-inspect` view can
+project an older packet onto current capability status: it preserves the
+historical `next_action` under `historical_next_action` and makes the current
+action non-executable when the capability is now unavailable. Persisted old R8
+records remain unchanged, including the original documentation and
+`static_check` gates and their separate historical outcomes.
+
+`task-complete` rejects an unavailable required capability before it can close
+a task. The candidate does not claim a real FLAC3D static check, full script or
+engineering validation. The version-bound documentation path remains limited
+to `command_name_only`; synthetic evidence remains synthetic.
