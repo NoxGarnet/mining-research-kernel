@@ -42,6 +42,29 @@ The R0–R8 labels are historical implementation and acceptance stages. They are
 kept in [completion status](docs/COMPLETION_STATUS.md), rather than serving as
 the user's task navigation.
 
+## Repository layout
+
+Start with the offline guide above and [mining_kernel.py](mining_kernel.py),
+the CLI entry point. You do not need to read every directory to use the kernel.
+
+| Path | Purpose |
+|---|---|
+| [docs/](docs/) | Usage guides, contracts, limitations and acceptance summaries. |
+| [examples/](examples/) | Runnable examples and synthetic workspaces for learning the API. |
+| [mining_research_kernel/](mining_research_kernel/) | Task, route, research record and Cognition services. |
+| [workflows/](workflows/) | Domain-specific task routes and capability declarations. |
+| [adapters/](adapters/) | Project and source discovery/inspection integrations. |
+| [providers/](providers/) | Documentation and execution provider implementations, including disabled and synthetic execution. |
+| [schemas/](schemas/) | JSON contracts for requests, records and derived views. |
+| [tests/](tests/) | Automated checks for kernel behavior; mainly for contributors. |
+| [fixtures/](fixtures/) | Fixed synthetic sample data used by tests; these are not private research files. |
+
+Other top-level Python files provide CLI support, project setup, extension
+registration, Run Ledger and Zotero snapshot utilities. The repository includes
+development and test material as well as runtime code; running a normal research
+task does not require running the test suite. Keep your own research inputs and
+generated records in a separate project directory.
+
 ## Agent and Kernel roles
 
 The Agent reads the question and available material, explains alternatives,
