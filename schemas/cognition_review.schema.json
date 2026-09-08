@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cognition Review",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "type", "id", "review_id", "revision", "project_id", "scope", "source_refs", "proposal_id", "review_ref", "decision", "evidence_refs", "impact", "boundary_id"],
+  "properties": {
+    "schema_version": {"const": 1}, "type": {"const": "CognitionReview"}, "id": {"type": "string", "minLength": 1}, "review_id": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1}, "project_id": {"type": "string", "minLength": 1}, "scope": {"type": "object", "minProperties": 1}, "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}, "proposal_id": {"type": "string", "minLength": 1}, "review_ref": {"type": "string", "minLength": 1}, "decision": {"enum": ["accept", "reject", "contested"]}, "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}, "impact": {"enum": ["low", "medium", "high"]}, "boundary_id": {"type": "string", "minLength": 1}, "reviewer_label": {"type": "string", "minLength": 1}
+  }
+}

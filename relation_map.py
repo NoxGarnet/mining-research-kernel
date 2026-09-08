@@ -9,6 +9,7 @@ import argparse, csv, hashlib, json, re
 from pathlib import Path
 from typing import Any
 
+from mining_research_kernel.artifacts import atomic_write_json, ensure_output_directory
 from zotero_snapshot import load_snapshot, normalize_doi
 
 ABS_RE = re.compile(r"^(?:[A-Za-z]:[\\/]|/|\\\\|file:)", re.I)
@@ -172,12 +173,12 @@ def build_mapping(snapshot: dict[str, Any], manifest_path: str | Path, ris_path:
             "markdown_reconciliation":{"expected_count":len(expected_md),"missing":md_missing,"shared":md_shared,"orphan":md_orphan,"collision":md_collision}}
 
 def write_artifacts(result: dict[str, Any], output: str | Path) -> None:
-    out=Path(output); out.mkdir(parents=True,exist_ok=True)
+    out=ensure_output_directory(output)
     payloads={"relation_map.json":result,"ambiguities.json":{"schema_version":1,"ambiguities":result["ambiguities"]},
       "duplicates.json":{"schema_version":1,"duplicates":result["duplicates"]},"orphans.json":{"schema_version":1,"orphans":result["orphans"]},
       "coverage_report.json":{"schema_version":1,"summary":result["summary"],"missing_from_zotero":result["missing_from_zotero"],"markdown_reconciliation":result["markdown_reconciliation"],"reconciliation":"Counts and missing titles are deterministically source-derived."},
       "rebuild_report.json":{"schema_version":1,"rebuildable":True,"inputs":["sanitized Zotero snapshot","source_manifest.csv","RIS","relative Markdown filenames"]}}
-    for name,obj in payloads.items(): (out/name).write_text(json.dumps(obj,ensure_ascii=False,indent=2,sort_keys=True)+"\n",encoding="utf-8")
+    for name,obj in payloads.items(): atomic_write_json(out / name, obj)
 
 def main(argv=None):
     p=argparse.ArgumentParser(); p.add_argument("--snapshot",required=True,action="append"); p.add_argument("--manifest",required=True); p.add_argument("--ris",required=True); p.add_argument("--markdown-root",required=True); p.add_argument("--output",required=True); a=p.parse_args(argv)

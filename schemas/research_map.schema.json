@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Research Map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "project_id", "nodes", "edges"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "ResearchMap"},
+    "project_id": {"type": "string", "minLength": 1},
+    "nodes": {"type": "array", "items": {"$ref": "#/$defs/node"}},
+    "edges": {"type": "array", "items": {"$ref": "#/$defs/edge"}}
+  },
+  "$defs": {
+    "node": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["schema_version", "type", "id", "revision", "project_id", "scope", "source_refs"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "type": {"type": "string", "minLength": 1},
+        "id": {"type": "string", "minLength": 1},
+        "revision": {"type": "integer", "minimum": 1},
+        "project_id": {"type": "string", "minLength": 1},
+        "scope": {"type": "object", "minProperties": 1},
+        "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "relationship_id", "revision", "project_id", "relation", "from_id", "from_revision", "to_id", "to_revision", "source_refs"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "relationship_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "integer", "minimum": 1},
+        "project_id": {"type": "string", "minLength": 1},
+        "relation": {"enum": ["route_addresses_question", "route_tests_hypothesis", "evidence_supports_claim", "evidence_contradicts_claim", "run_executes_route", "run_produces_evidence", "verification_checks_run", "failure_observed_in_run", "decision_closes_route", "source_documents_claim", "evidence_derived_from_asset", "route_child_of_route", "route_supersedes_route", "route_in_comparison", "route_targets_claim", "cognition_proposal_uses_evidence", "cognition_review_reviews_proposal", "cognition_review_uses_evidence"]},
+        "from_id": {"type": "string", "minLength": 1},
+        "from_revision": {"type": "integer", "minimum": 1},
+        "to_id": {"type": "string", "minLength": 1},
+        "to_revision": {"type": "integer", "minimum": 1},
+        "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "status": {"enum": ["active", "superseded"]}
+      }
+    }
+  }
+}

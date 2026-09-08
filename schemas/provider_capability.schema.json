@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Provider Capability",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "type", "provider_id", "provider_kind", "available", "host_local", "capabilities", "product_version", "authorization_required", "last_checked", "diagnostics"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "ProviderCapability"},
+    "provider_id": {"type": "string", "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)+$"},
+    "provider_kind": {"enum": ["documentation", "source", "execution", "knowledge", "transform"]},
+    "source_kind": {"enum": ["local", "installed", "official_web", "unavailable"]},
+    "available": {"type": "boolean"},
+    "host_local": {"type": "boolean"},
+    "capabilities": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "product_version": {"type": ["string", "null"]},
+    "authorization_required": {"type": "boolean"},
+    "last_checked": {"type": ["string", "null"]},
+    "diagnostics": {"type": "array"},
+    "status": {"enum": ["disabled", "available", "unknown", "CANNOT_VERIFY"]}
+  }
+}

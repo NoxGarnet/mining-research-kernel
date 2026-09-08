@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Research Evidence Record",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema_version", "type", "id", "revision", "project_id", "scope", "source_refs", "evidence_kind", "asset_ref", "locator", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "type": {"const": "Evidence"},
+    "id": {"type": "string", "minLength": 1},
+    "revision": {"type": "integer", "minimum": 1},
+    "project_id": {"type": "string", "minLength": 1},
+    "scope": {"type": "object", "minProperties": 1},
+    "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "evidence_kind": {"type": "string", "minLength": 1},
+    "asset_ref": {"type": "string", "minLength": 1},
+    "locator": {"type": "object", "minProperties": 1},
+    "status": {"type": "string", "minLength": 1}
+  }
+}

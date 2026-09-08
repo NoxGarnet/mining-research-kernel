@@ -1,0 +1,2 @@
+# Required only for the complete test suite's Draft 2020-12 checks.
+jsonschema==4.26.0

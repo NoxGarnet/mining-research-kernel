@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cognition Proposal",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "type", "id", "proposal_id", "revision", "project_id", "scope", "source_refs", "proposal_type", "statement", "evidence_refs", "counterevidence_refs", "requested_status", "admitted_status", "current_status", "created_by", "impact", "dependencies", "invalidation_conditions", "review_key"],
+  "properties": {
+    "schema_version": {"const": 1}, "type": {"const": "CognitionProposal"}, "id": {"type": "string", "minLength": 1}, "proposal_id": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1}, "project_id": {"type": "string", "minLength": 1}, "scope": {"type": "object", "minProperties": 1}, "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "proposal_type": {"enum": ["project_lesson", "workflow_rule", "domain_rule", "claim", "supersession", "conflict"]}, "statement": {"type": "string", "minLength": 1}, "evidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}, "counterevidence_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "requested_status": {"enum": ["proposed", "provisional", "accepted", "rejected", "contested", "pending_review"]}, "admitted_status": {"enum": ["proposed", "provisional", "accepted", "rejected", "contested", "pending_review", "stale"]}, "current_status": {"enum": ["proposed", "provisional", "accepted", "rejected", "contested", "pending_review", "stale"]},
+    "created_by": {"type": "string", "minLength": 1}, "created_by_role": {"type": "string", "minLength": 1}, "created_model": {"type": "string", "minLength": 1}, "impact": {"enum": ["low", "medium", "high"]}, "object_ref": {"type": ["string", "null"], "minLength": 1}, "scope_key": {"type": ["string", "null"], "minLength": 1}, "fact_key": {"type": ["string", "null"], "minLength": 1}, "fact_value": {},
+    "dependencies": {"type": "array", "items": {"$ref": "#/$defs/dependency"}}, "invalidation_conditions": {"type": "array", "items": {"enum": ["record_missing", "revision_changed", "content_hash_changed", "explicitly_superseded"]}}, "expiry_conditions": {"type": "array", "items": {"type": "string", "minLength": 1}}, "review_key": {"type": "string", "minLength": 1}, "status_reason": {"type": "string", "minLength": 1}, "task_id": {"type": ["string", "null"], "minLength": 1}, "route_id": {"type": ["string", "null"], "minLength": 1}, "claim_id": {"type": ["string", "null"], "minLength": 1}
+  },
+  "$defs": {"dependency": {"type": "object", "additionalProperties": false, "required": ["record_id", "record_type", "revision"], "properties": {"record_id": {"type": "string", "minLength": 1}, "record_type": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1}, "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}
+}

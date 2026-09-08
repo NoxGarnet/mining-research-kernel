@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Failure",
+  "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "type", "id", "failure_id", "revision", "project_id", "scope", "source_refs", "status", "observable_failure", "reproduction", "affected_product_versions", "input_assets", "evidence_assets", "root_cause_status", "resolution_status", "applicability", "object_refs", "task_id", "route_id", "run_id"],
+  "properties": {
+    "schema_version": {"const": 1}, "type": {"const": "Failure"}, "id": {"type": "string", "minLength": 1}, "failure_id": {"type": "string", "minLength": 1}, "revision": {"type": "integer", "minimum": 1}, "project_id": {"type": "string", "minLength": 1}, "scope": {"type": "object", "minProperties": 1}, "source_refs": {"type": "array", "items": {"type": "string", "minLength": 1}},
+    "status": {"type": "string", "minLength": 1}, "observable_failure": {"type": "string", "minLength": 1}, "reproduction": {"type": "array"}, "affected_product_versions": {"type": "array", "items": {"type": "string", "minLength": 1}}, "input_assets": {"type": "array", "items": {"type": "string", "minLength": 1}}, "evidence_assets": {"type": "array", "items": {"type": "string", "minLength": 1}}, "root_cause_status": {"enum": ["unknown", "suspected", "verified"]}, "resolution_status": {"enum": ["open", "mitigated", "resolved", "superseded"]}, "applicability": {"enum": ["project_only", "workflow_candidate"]},
+    "object_refs": {"type": "array", "items": {"type": "string", "minLength": 1}}, "task_id": {"type": ["string", "null"], "minLength": 1}, "route_id": {"type": ["string", "null"], "minLength": 1}, "run_id": {"type": ["string", "null"], "minLength": 1}, "severity": {"enum": ["info", "warning", "error"]}, "affected_scope": {"type": "object"}
+  }
+}
