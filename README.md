@@ -203,8 +203,10 @@ The last source inspection intentionally reports `CANNOT_VERIFY` because no
 external Zotero reader is supplied by the example. A compatible application
 may inject a reader for one allowed operation.
 
-Publishing decisions are maintained separately in [release notes](docs/RELEASE_NOTES_DRAFT.md)
-and are not implied by a successful local example.
+Release notes for the published version are in [RELEASE_NOTES.md](RELEASE_NOTES.md)
+and on the [v0.1.0 GitHub Release](https://github.com/NoxGarnet/mining-research-kernel/releases/tag/v0.1.0).
+The pre-publication candidate draft is archived in
+[docs/archive/v0.1.0-release-candidate.md](docs/archive/v0.1.0-release-candidate.md).
 
 ## Developer validation
 
