@@ -125,6 +125,20 @@ source registration. The explicit CLI works independently of project setup.
 
 ## Synthetic and real-source acceptance
 
+TaskEngine's constructor and the Python `task_start` function's separate
+`documentation_result` argument are trusted Host integration points. The Host
+must supply the result of its selected DocumentationProvider; it must not
+forward Agent-controlled JSON into these arguments. A supplied Host result,
+including a failed or empty result, takes precedence over request evidence.
+This is an API trust boundary, not authentication or proof of official origin.
+
+Production tasks do not use `request.documentation_result` as verification
+evidence. The `task-start --documentation-result` CLI option supplies request
+data only and overrides the same field in `--request-json`; it can support
+synthetic tasks but cannot produce production VERIFIED. For production, use
+the trusted Python Host integration after the documentation check. Persisted
+TaskStates from earlier versions are not revalidated by this change.
+
 Synthetic tests generate handmade HTML in temporary directories. A synthetic
 registration requires --task-context synthetic and returns SYNTHETIC_VERIFIED;
 the default production context rejects it. Public tests never need a real

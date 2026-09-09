@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from mining_research_kernel.artifacts import _reject_reparse_chain
+
 
 SCHEMA_VERSION = 1
 STAGES = ("exploration", "plan", "execution", "test", "acceptance")
@@ -66,6 +68,10 @@ def validate_run_id(run_id: str) -> str:
 def resolve_run_dir(runs_root: str | Path, run_id: str) -> Path:
     """Resolve a validated run below the caller-supplied allowed root."""
     validate_run_id(run_id)
+    try:
+        _reject_reparse_chain(Path(runs_root).expanduser() / run_id, "run directory")
+    except ValueError as exc:
+        raise RunLedgerError(str(exc)) from exc
     root = Path(runs_root).expanduser().resolve()
     run_dir = (root / run_id).resolve()
     if run_dir == root or root not in run_dir.parents:

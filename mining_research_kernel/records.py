@@ -14,6 +14,15 @@ from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from mining_research_kernel.artifacts import _reject_reparse_chain
+
+
+def _check_record_path(path: Path) -> None:
+    try:
+        _reject_reparse_chain(path, "research records")
+    except ValueError as exc:
+        raise ResearchStoreError(str(exc)) from exc
+
 
 SCHEMA_VERSION = 1
 TRANSACTION_TYPE = "ResearchTransaction"
@@ -445,6 +454,8 @@ class _Writer:
         self._owned = False
 
     def __enter__(self) -> "_Writer":
+        _check_record_path(self.lock_path)
+        _check_record_path(self.lock_path.parent / "records")
         self.lock_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -510,6 +521,7 @@ class ResearchStore:
 
     def writer(self, operation_id: str) -> _Writer:
         _validate_id(operation_id, "operation_id")
+        _check_record_path(self.records_dir)
         return _Writer(self.lock_path, operation_id)
 
     acquire_writer = writer
@@ -520,12 +532,14 @@ class ResearchStore:
             callback(stage)
 
     def _read_transactions(self) -> list[dict[str, Any]]:
+        _check_record_path(self.records_dir)
         if not self.records_dir.exists():
             return []
         if not self.records_dir.is_dir():
             raise ResearchStoreError("research/records is not a directory")
         entries: list[tuple[int, Path]] = []
         for path in self.records_dir.iterdir():
+            _check_record_path(path)
             if path.is_dir():
                 continue
             if TEMP_RE.fullmatch(path.name):
@@ -747,6 +761,8 @@ class ResearchStore:
             self.records_dir.mkdir(parents=True, exist_ok=True)
             temporary = self.records_dir / f".{operation_id}.tmp"
             target = self.records_dir / f"{sequence:08d}.json"
+            _check_record_path(temporary)
+            _check_record_path(target)
             temporary.write_bytes(_pretty_bytes(transaction))
             with temporary.open("r+b") as stream:
                 stream.flush()

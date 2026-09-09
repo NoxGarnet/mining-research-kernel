@@ -336,6 +336,11 @@ def _literature_records(root: Path, project_id: str, task_id: str, request: Mapp
 
 def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] | str,
                documentation_result: Mapping[str, Any] | str | None = None) -> dict[str, Any]:
+    """Start a task; documentation_result is reserved for trusted Host evidence.
+
+    Hosts must obtain that argument from their DocumentationProvider, never
+    forward an Agent request field or arbitrary CLI JSON into it.
+    """
     root, config, project = _load_project(project_root)
     request_value = load_json_value(request, "request-json")
     if not isinstance(request_value, Mapping):
@@ -881,6 +886,12 @@ def task_run_fake(project_root: str | os.PathLike[str], task_id: str,
         raise ValueError("production tasks cannot use task-run-fake")
     if packet.get("state") not in {"ready", "failed"}:
         raise ValueError(f"task is not runnable: {packet.get('state')}")
+    run_id = f"run-{hashlib.sha256((task_id + '|' + operation_id).encode('utf-8')).hexdigest()[:32]}"
+    runs_root = root / "research" / "runs"
+    # Reject a pre-existing link before charging the budget or dispatching.
+    # Persistence still checks again; concurrent directory swaps are outside
+    # the local v0.1.0 boundary.
+    resolve_run_dir(runs_root, run_id)
     packet["fixture_id"] = fixture_id
     engine_request = {
         "task_id": task_id, "project_id": config["project_id"],
@@ -977,8 +988,6 @@ def task_run_fake(project_root: str | os.PathLike[str], task_id: str,
     outcome = result.get("status") if isinstance(result, Mapping) else "UNKNOWN"
     if outcome not in {"COMPLETED", "UNKNOWN"}:
         outcome = "UNKNOWN"
-    run_id = f"run-{hashlib.sha256((task_id + "|" + operation_id).encode("utf-8")).hexdigest()[:32]}"
-    runs_root = root / "research" / "runs"
     run_dir = resolve_run_dir(runs_root, run_id)
     if not run_dir.exists():
         create_run(runs_root, run_id,

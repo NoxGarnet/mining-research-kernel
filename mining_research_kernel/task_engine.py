@@ -135,7 +135,8 @@ class TaskEngine:
             "decisions": _strings(refs.get("decisions", refs.get("decision_refs", [])), "decision_refs"),
             "cognition": _strings(refs.get("cognition", refs.get("cognition_refs", [])), "cognition_refs"),
         }
-        self.documentation_result = _copy(documentation_result or kwargs.get("documentation_result"))
+        # Host-supplied provider evidence, never populated from Agent request data.
+        self.documentation_result = _copy(documentation_result)
         self._tasks: dict[str, dict[str, Any]] = {}
 
     def _provider(self, name: str) -> Any:
@@ -151,12 +152,19 @@ class TaskEngine:
         reason, resume = unavailable
         return False, reason, resume
 
+    def _documentation_source(self, request: Mapping[str, Any]) -> Any:
+        if self.documentation_result is not None:
+            return self.documentation_result
+        if request.get("task_context", "production") == "synthetic":
+            return request.get("documentation_result")
+        return None
+
     def _documentation_assessment(self, request: Mapping[str, Any], gates: list[str]) -> tuple[bool, str, str]:
         # This validates a result crossing the configured provider boundary;
         # it provides no signature verification or authentication.
         if "documentation" not in gates:
             return True, "NOT_APPLICABLE", "task_does_not_require_gate"
-        result = request.get("documentation_result", self.documentation_result)
+        result = self._documentation_source(request)
         context = request.get("task_context", "production")
         if context not in {"production", "synthetic"}:
             return False, "CANNOT_VERIFY", "task_context_invalid"
@@ -331,7 +339,7 @@ class TaskEngine:
             raise ValueError("verification_gates must be a list")
         gates = list(dict.fromkeys([*(gate for gate in workflow_gates if isinstance(gate, str)),
                                     *(gate for gate in caller_gates if isinstance(gate, str))]))
-        documentation_value = request.get("documentation_result", self.documentation_result)
+        documentation_value = self._documentation_source(request)
         documentation_result = _copy(documentation_value) if isinstance(documentation_value, Mapping) else None
         _documentation_ok, documentation_status, documentation_reason = self._documentation_assessment(request, gates)
         gate_statuses = _copy(self.workflow_pack.get("gate_statuses", {}))

@@ -93,7 +93,7 @@ def main(argv=None):
     rr = sub.add_parser("run-record"); rr.add_argument("--runs-root", required=True); rr.add_argument("run_id"); rr.add_argument("stage"); rr.add_argument("--role", required=True); rr.add_argument("--model", required=True); rr.add_argument("--status", required=True); rr.add_argument("--inputs-json", default="null"); rr.add_argument("--outputs-json", default="null"); rr.add_argument("--data-json", default="{}")
     ri = sub.add_parser("run-inspect"); ri.add_argument("--runs-root", required=True); ri.add_argument("run_id")
     rv = sub.add_parser("run-validate"); rv.add_argument("--runs-root", required=True); rv.add_argument("run_id")
-    ts = sub.add_parser("task-start"); ts.add_argument("--project-root", required=True); ts.add_argument("--request-json", required=True); ts.add_argument("--documentation-result")
+    ts = sub.add_parser("task-start"); ts.add_argument("--project-root", required=True); ts.add_argument("--request-json", required=True); ts.add_argument("--documentation-result", help="request evidence for synthetic tasks only; cannot verify production documentation")
     ti = sub.add_parser("task-inspect"); ti.add_argument("--project-root", required=True); ti.add_argument("task_id")
     tc = sub.add_parser("task-complete"); tc.add_argument("--project-root", required=True); tc.add_argument("task_id"); tc.add_argument("--operation-id", required=True); tc.add_argument("--completion-json", required=True)
     tf = sub.add_parser("task-run-fake"); tf.add_argument("--project-root", required=True); tf.add_argument("task_id"); tf.add_argument("--operation-id", required=True); tf.add_argument("--fixture-id", required=True)
@@ -115,8 +115,16 @@ def main(argv=None):
     cr4 = sub.add_parser("cognition-review"); cr4.add_argument("--project-root", required=True); cr4.add_argument("proposal_id"); cr4.add_argument("--operation-id", required=True); cr4.add_argument("--review-ref", required=True); cr4.add_argument("--evidence-json", default="null"); cr4.add_argument("--scope-json", default="null"); cr4.add_argument("--impact"); cr4.add_argument("--decision", choices=("accept", "reject", "contested"), default="accept")
     args = ap.parse_args(argv); workspace = Path(args.workspace).resolve()
     if args.command == "task-start":
-        from mining_research_kernel.r2_workflow import task_start
-        out = task_start(args.project_root, args.request_json, args.documentation_result)
+        from mining_research_kernel.r2_workflow import load_json_value, task_start
+        request = load_json_value(args.request_json, "request-json")
+        if not isinstance(request, dict):
+            raise ValueError("request-json must contain a JSON object")
+        if args.documentation_result is not None:
+            documentation = load_json_value(args.documentation_result, "documentation-result")
+            if not isinstance(documentation, dict):
+                raise ValueError("documentation-result must contain a JSON object")
+            request["documentation_result"] = documentation
+        out = task_start(args.project_root, request)
     elif args.command == "task-inspect":
         from mining_research_kernel.r2_workflow import task_inspect
         out = task_inspect(args.project_root, args.task_id)
