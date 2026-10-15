@@ -1,14 +1,54 @@
-# v0.1.0 Completion Status
+# Completion Status and Historical Acceptance
 
-## Current candidate state — 2026-09-07
+## Local integration candidate — 2026-10-15
 
-The current working tree is the code baseline
-`72a2d6bcb80d6136c27d2aca61a0ce890f9ab9fd` plus uncommitted publication
-material and reference-example edits. The code baseline is locally accepted at the
-bounded scope recorded in [ACCEPTANCE_SUMMARY.md](ACCEPTANCE_SUMMARY.md): 200
-tests run, 199 passed and 1 file-symlink test skipped; 10/10 applicable README
-commands succeeded; 19 schema files parsed; and 2 representative
-TaskPacket/inspect outputs passed runtime schema validation.
+The local integration candidate is based on `be72204d9ed51b627546f3a1d1ffe0429b4fb432`
+and includes evidence review and judgment updates, read-only recovery/project
+navigation, the lightweight workspace starter, and Windows Run Ledger fixes.
+These additions have not been tagged or published as a new release.
+
+Validation used an isolated source snapshot containing the files selected by
+Git, including intended new files, without ignored local state or private
+research inputs. This was a prospective source distribution, not a new Git
+commit or a remote CI run. Windows with Python 3.14.2 was exercised.
+
+| Check | Local result |
+|---|---|
+| Complete unittest CLI | 264 run; 262 passed; 2 file-symlink cases skipped; no errors or failures. |
+| New Windows regressions | 9 passed, including live/exited process probes, bounded retry and destination preservation. |
+| Schema documents | 19 passed Draft 2020-12 checks. |
+| Standard-library examples | Synthetic discovery, validation and the expected unavailable Zotero-reader result passed. |
+| Starter and continuation | Documented PowerShell commands, cold navigation from another directory and plain-file continuation passed. |
+
+The test process used an isolated temporary directory. It did not change
+signal handlers or patch the runtime. Windows process-owner inspection now
+uses a process handle instead of `os.kill`; atomic run-directory publication
+retries only selected transient Windows errors within a bounded interval.
+Unknown owner state preserves the writer lock, and an existing destination
+is not replaced by the retry path.
+
+The earlier local Windows interruption and directory-publication failures
+are retained as historical observations; their temporary test-host workaround
+is not part of this candidate. File-symlink coverage remains unavailable on
+the tested host. No real engine, experimental, Zotero-write or research-value
+verification is implied. Remote Actions and publication remain separate.
+
+## Historical released-tree state — 2026-09-16
+
+At this maintenance checkpoint, `main` was at `be72204d9ed51b627546f3a1d1ffe0429b4fb432`.
+The local `v0.1.0` tag pointed to `c87960dc96d38ed0e6e964d2c8107893f19debda`;
+that commit was a documentation-only follow-up that pointed readers to
+the published release notes. The tested v0.1.0 code baseline remains
+`35c141243e60f3386da1255530b17492f8e754e7`, with the acceptance evidence
+recorded in [ACCEPTANCE_SUMMARY.md](ACCEPTANCE_SUMMARY.md): 209 tests run,
+208 passed and 1 file-symlink test skipped; 18/18 offline CLI acceptance
+commands succeeded; 19 schema documents passed checks; and six TaskPacket
+outputs passed runtime schema validation.
+
+At that checkpoint the maintenance working tree also contained an uncommitted P2 extension
+for explicit read-only Asset/Evidence linking in TaskPackets. It is locally
+tested as a maintenance change and was not part of the tagged v0.1.0 release
+until separately reviewed and published.
 
 The runtime-only public examples use Python standard-library facilities. The
 complete tests and Draft 2020-12 checks require `jsonschema==4.26.0`; Python
@@ -24,24 +64,33 @@ Current capability boundary:
 - User-provided resources include version-matched Itasca local documentation,
   source registration, sanitized Zotero snapshots and caller-injected
   read-only Zotero readers.
+- Read-only evidence-review tasks can explicitly link registered Asset and
+  Evidence records, carry requested locators and separate registration,
+  content, reading and verification statuses. A Host can persist a bounded
+  material read and provisional judgment as a Decision, and a new task can
+  recover that Decision; this does not implement production FLAC3D static
+  checking or scientific validation.
 - Production FLAC3D `static_check`, real FLAC3D execution and a complete
   `itasca-mcp` integration remain unimplemented.
 
 Remaining matters are separate: the file-symlink test lacks platform coverage;
-the original R8 two-gate task remains incomplete; no scientific or engineering
-validity is claimed; and the candidate has not been pushed or published.
-Historical Private staging evidence applies to its own earlier commit and does
-not represent remote acceptance of this baseline. This round did not rerun the
-complete baseline suite after these documentation and example edits.
+no scientific or engineering validity is claimed. Historical Private staging
+evidence applies to its own earlier commit and does not represent acceptance of
+the released tree.
+
+This maintenance pass created a clean local maintenance clone from the local
+release copy. The GitHub remote, current remote branch, tag and Release state
+were not independently re-read in this pass; this document therefore makes no
+new claim about current remote state.
 
 The technical acceptance result, the platform coverage gap and the unexecuted
 publication decisions are intentionally reported as separate facts.
 
-This file records local completion evidence for the revised v0.1.0 scope.
+This file records completion evidence for the revised v0.1.0 scope.
 The 2026-09-05 revision supersedes the old Phase 1/2 acceptance interpretation.
 Design decisions and implementation boundaries are in
 [R0_IMPLEMENTATION_CONTRACT.md](R0_IMPLEMENTATION_CONTRACT.md).
-Release remains blocked. No real engine/Zotero or release operation was run.
+No real engine/Zotero operation was run as part of this maintenance pass.
 
 ## Historical Phase 0 baseline (not the current working-tree state)
 
