@@ -20,6 +20,13 @@ commit or a remote CI run. Windows with Python 3.14.2 was exercised.
 | Standard-library examples | Synthetic discovery, validation and the expected unavailable Zotero-reader result passed. |
 | Starter and continuation | Documented PowerShell commands, cold navigation from another directory and plain-file continuation passed. |
 
+The follow-up local Git clone of
+`f24745327973456ff736ef18887fcddcc7e7d071` used neither shared objects nor
+hardlinks. It passed the declared CI command
+`python -B -m unittest discover -s tests -v` with the same 264/262/2 result
+and remained clean afterward. These are local results; GitHub Actions has
+not been run for this candidate.
+
 The test process used an isolated temporary directory. It did not change
 signal handlers or patch the runtime. Windows process-owner inspection now
 uses a process handle instead of `os.kill`; atomic run-directory publication
