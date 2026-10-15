@@ -87,6 +87,12 @@ def main(argv=None):
     si = sub.add_parser("init-synthetic-project")
     si.add_argument("path")
     si.add_argument("--project-id", required=True)
+    iw = sub.add_parser("init-workspace", help="create a minimal three-file research workspace")
+    iw.add_argument("path")
+    iw.add_argument("--project-id", required=True)
+    iw.add_argument("--question", required=True)
+    wc = sub.add_parser("workspace-context", help="read-only navigation from an explicit INDEX.md")
+    wc.add_argument("--workspace-root", required=True)
     z = sub.add_parser("validate-zotero-snapshot"); z.add_argument("path")
     z = sub.add_parser("inspect-zotero-snapshot"); z.add_argument("path"); z.add_argument("--project-id", default="zotero_snapshot")
     rc = sub.add_parser("run-create"); rc.add_argument("--runs-root", required=True); rc.add_argument("run_id"); rc.add_argument("--request-json", default="null"); rc.add_argument("--inputs-json", default='{"input_hashes":[]}')
@@ -95,6 +101,22 @@ def main(argv=None):
     rv = sub.add_parser("run-validate"); rv.add_argument("--runs-root", required=True); rv.add_argument("run_id")
     ts = sub.add_parser("task-start"); ts.add_argument("--project-root", required=True); ts.add_argument("--request-json", required=True); ts.add_argument("--documentation-result", help="request evidence for synthetic tasks only; cannot verify production documentation")
     ti = sub.add_parser("task-inspect"); ti.add_argument("--project-root", required=True); ti.add_argument("task_id")
+    context = sub.add_parser("project-context", help="read-only project navigation without a task ID")
+    context.add_argument("--project-root", required=True)
+    context.add_argument("--manifest", help="explicit project-relative JSON material list")
+    context.add_argument("--offset", type=int, default=0)
+    context.add_argument("--limit", type=int, default=8)
+    resume = sub.add_parser("resume", aliases=["task-resume"], help="read-only compact recovery view")
+    resume.add_argument("--project-root", "--project", dest="project_root", required=True)
+    resume.add_argument("--task-id", "--task", dest="task_id", required=True)
+    resume.add_argument("--max-chars", type=int, default=4000)
+    show = sub.add_parser("show", help="read-only on-demand record or section view")
+    show.add_argument("--project-root", "--project", dest="project_root", required=True)
+    show.add_argument("record_id", nargs="?")
+    show.add_argument("--record-id", dest="record_id_option")
+    show.add_argument("--section")
+    tr = sub.add_parser("task-record-evidence-review"); tr.add_argument("--project-root", required=True); tr.add_argument("task_id"); tr.add_argument("--operation-id", required=True); tr.add_argument("--assessment-json", required=True)
+    ju = sub.add_parser("task-record-judgment-update"); ju.add_argument("--project-root", required=True); ju.add_argument("task_id"); ju.add_argument("--operation-id", required=True); ju.add_argument("--update-json", required=True)
     tc = sub.add_parser("task-complete"); tc.add_argument("--project-root", required=True); tc.add_argument("task_id"); tc.add_argument("--operation-id", required=True); tc.add_argument("--completion-json", required=True)
     tf = sub.add_parser("task-run-fake"); tf.add_argument("--project-root", required=True); tf.add_argument("task_id"); tf.add_argument("--operation-id", required=True); tf.add_argument("--fixture-id", required=True)
     rm = sub.add_parser("research-map-rebuild"); rm.add_argument("--project-root", required=True); rm.add_argument("--output")
@@ -114,7 +136,14 @@ def main(argv=None):
     cg4 = sub.add_parser("cognition-failure-gate"); cg4.add_argument("--project-root", required=True); cg4.add_argument("--object-ref"); cg4.add_argument("--task-id"); cg4.add_argument("--route-id"); cg4.add_argument("--version")
     cr4 = sub.add_parser("cognition-review"); cr4.add_argument("--project-root", required=True); cr4.add_argument("proposal_id"); cr4.add_argument("--operation-id", required=True); cr4.add_argument("--review-ref", required=True); cr4.add_argument("--evidence-json", default="null"); cr4.add_argument("--scope-json", default="null"); cr4.add_argument("--impact"); cr4.add_argument("--decision", choices=("accept", "reject", "contested"), default="accept")
     args = ap.parse_args(argv); workspace = Path(args.workspace).resolve()
-    if args.command == "task-start":
+    if args.command == "init-workspace":
+        from workspace_init import init_workspace
+        out = {"initialized": str(init_workspace(args.path, args.project_id, args.question)),
+               "project_id": args.project_id, "files": ["AGENTS.md", "INDEX.md", f"projects/{args.project_id}/START.md"]}
+    elif args.command == "workspace-context":
+        from mining_research_kernel.workspace_context import workspace_context
+        out = workspace_context(args.workspace_root)
+    elif args.command == "task-start":
         from mining_research_kernel.r2_workflow import load_json_value, task_start
         request = load_json_value(args.request_json, "request-json")
         if not isinstance(request, dict):
@@ -128,6 +157,30 @@ def main(argv=None):
     elif args.command == "task-inspect":
         from mining_research_kernel.r2_workflow import task_inspect
         out = task_inspect(args.project_root, args.task_id)
+    elif args.command == "project-context":
+        from mining_research_kernel.project_context import project_context
+        out = project_context(args.project_root, manifest=args.manifest, offset=args.offset, limit=args.limit)
+    elif args.command in {"resume", "task-resume"}:
+        from mining_research_kernel.on_demand import resume_task
+        out = resume_task(args.project_root, args.task_id, max_chars=args.max_chars)
+    elif args.command == "show":
+        from mining_research_kernel.on_demand import show_record
+        record_id = args.record_id_option or args.record_id
+        if not record_id:
+            raise ValueError("show requires a record id")
+        out = show_record(args.project_root, record_id, section=args.section)
+    elif args.command == "task-record-evidence-review":
+        from mining_research_kernel.r2_workflow import load_json_value, task_record_evidence_review
+        out = task_record_evidence_review(
+            args.project_root, args.task_id, args.operation_id,
+            load_json_value(args.assessment_json, "assessment-json"),
+        )
+    elif args.command == "task-record-judgment-update":
+        from mining_research_kernel.r2_workflow import load_json_value, task_record_judgment_update
+        out = task_record_judgment_update(
+            args.project_root, args.task_id, args.operation_id,
+            load_json_value(args.update_json, "update-json"),
+        )
     elif args.command == "task-complete":
         from mining_research_kernel.r2_workflow import load_json_value, task_complete
         out = task_complete(args.project_root, args.task_id, args.operation_id,

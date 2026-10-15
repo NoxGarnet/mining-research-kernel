@@ -1,10 +1,30 @@
 # Mining Research Kernel
 
-A small, filesystem-native kernel for Agent-assisted mining research: it
-organizes research questions, routes, evidence, records, recovery and
-auditable run ledgers. The runtime and offline public examples use only the
-Python standard library. The complete test suite additionally needs the
-development dependency listed in `requirements-test.txt`.
+A filesystem-native workspace and optional research kernel for Agent-assisted
+mining research. Start with a small Markdown workspace, then enable durable
+research records and domain workflows when the task needs them. Runtime and
+offline examples use the Python standard library.
+
+## Start or continue a project
+
+- [Start a lightweight workspace](docs/START_WORKSPACE.md): create the three-file entry and continue from a real research question.
+- [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
+- [First FLAC3D task](docs/FLAC3D_FIRST_TASK.md): identify inputs, version and a bounded first check.
+
+Example (PowerShell):
+
+```powershell
+$starterRoot = 'D:\replace-with-user-chosen\mining'
+python -B -X utf8 .\mining_kernel.py init-workspace $starterRoot --project-id roadway-support --question "核查现有巷道支护模型的安装时序"
+python -B -X utf8 .\mining_kernel.py workspace-context --workspace-root $starterRoot
+```
+
+Replace the example with a new or empty directory you choose outside this code
+repository. Keep research inputs and generated project files there.
+
+The lightweight entry does not configure a model, create a ledger or claim
+that FLAC3D/PFC/AE or any registered external tool is installed or available.
+Software versions, inputs and checks remain unknown until confirmed.
 
 ## Why this exists
 
@@ -21,17 +41,15 @@ is known, missing or blocked. It is a research record and recovery kernel, not
 an autonomous research system or a substitute for FLAC3D, Zotero or an
 engineering reviewer.
 
-## Start here
+## Research kernel mechanism demonstration
 
-For a first run, use the [offline synthetic workflow](docs/R5_QUICKSTART.md).
-It needs an empty user directory and shows the complete boundary: submit a
-question and Claim, perform one bounded fixture action, inspect the final
-TaskState from a separate process, and rebuild the Research Map. The fixture
-execution is synthetic; the records, provenance and recovery are real kernel
-operations.
+The [offline synthetic workflow](docs/R5_QUICKSTART.md) demonstrates task,
+evidence, recovery and record mechanics with fixtures. Its execution is
+synthetic; it is not a real FLAC3D, PFC, or AE task.
 
 Then choose the task you actually need:
 
+- [Find project entries, saved judgments and material locations without creating a task](docs/PROJECT_CONTEXT.md).
 - [Check an FLAC3D command name against applicable official documentation](docs/R1_DOCUMENTATION.md).
 - [Record a task, evidence and bounded run](docs/R2_QUICKSTART.md).
 - [Compare limited routes and preserve failures](docs/R3_QUICKSTART.md).
@@ -44,8 +62,9 @@ the user's task navigation.
 
 ## Repository layout
 
-Start with the offline guide above and [mining_kernel.py](mining_kernel.py),
-the CLI entry point. You do not need to read every directory to use the kernel.
+The lightweight guides above are the user entry. Contributors can inspect
+[mining_kernel.py](mining_kernel.py), the CLI entry point. Users do not need
+to read every directory to start a project.
 
 | Path | Purpose |
 |---|---|
@@ -116,6 +135,14 @@ an independent review.
 - A bounded local-material registration entry point that creates hashed
   Asset/Evidence records without copying source bytes; primary/original,
   project_record and derived_reading_note are kept distinct.
+- An explicit read-only evidence-review task that links registered Asset and
+  Evidence records into TaskPacket reads, detects project-relative source drift,
+  and keeps reading and verification statuses separate from registration.
+- A read-only compact `resume` view and targeted `show` expansion for persisted
+  research state; the complete `task-inspect` TaskPacket remains available.
+- A bounded incremental judgment update that inherits existing material reads,
+  checks Decision revisions and Evidence references, and preserves prior
+  Decisions without creating execution or Verification records.
 - A fully synthetic workspace example that runs without third-party packages;
   the complete test suite and schema checks require `jsonschema`.
 

@@ -35,7 +35,7 @@
         "relationship_id": {"type": "string", "minLength": 1},
         "revision": {"type": "integer", "minimum": 1},
         "project_id": {"type": "string", "minLength": 1},
-        "relation": {"enum": ["route_addresses_question", "route_tests_hypothesis", "evidence_supports_claim", "evidence_contradicts_claim", "run_executes_route", "run_produces_evidence", "verification_checks_run", "failure_observed_in_run", "decision_closes_route", "source_documents_claim", "evidence_derived_from_asset", "route_child_of_route", "route_supersedes_route", "route_in_comparison", "route_targets_claim", "cognition_proposal_uses_evidence", "cognition_review_reviews_proposal", "cognition_review_uses_evidence"]},
+        "relation": {"enum": ["route_addresses_question", "route_tests_hypothesis", "evidence_supports_claim", "evidence_contradicts_claim", "run_executes_route", "run_produces_evidence", "verification_checks_run", "failure_observed_in_run", "decision_closes_route", "source_documents_claim", "evidence_derived_from_asset", "route_child_of_route", "route_supersedes_route", "route_in_comparison", "route_targets_claim", "route_reads_asset", "route_reads_evidence", "decision_records_evidence", "cognition_proposal_uses_evidence", "cognition_review_reviews_proposal", "cognition_review_uses_evidence"]},
         "from_id": {"type": "string", "minLength": 1},
         "from_revision": {"type": "integer", "minimum": 1},
         "to_id": {"type": "string", "minLength": 1},

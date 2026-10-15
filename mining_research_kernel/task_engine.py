@@ -251,6 +251,15 @@ class TaskEngine:
         if state == "proposed":
             return {"action_id": "task.prepare", "executable": True, "input_refs": packet["required_reads"],
                     "expected_outputs": ["validated task packet"], "preconditions": ["task request is reviewable"]}
+        if _kind(packet["task_type"]) == "evidence_review":
+            return {
+                "action_id": packet["task_type"] + ".inspect",
+                "executable": state == "ready",
+                "input_refs": packet["required_reads"],
+                "expected_outputs": ["read-only material assessment"],
+                "preconditions": [{"predicate": "registered_materials_are_scoped",
+                                   "value": bool(packet.get("material_reads"))}],
+            }
         return {
             "action_id": packet["task_type"] + (".run" if state == "ready" else ".in_progress"),
             "executable": state == "ready", "input_refs": packet["required_reads"],
@@ -351,10 +360,27 @@ class TaskEngine:
                                        "reason": documentation_reason})
         else:
             documentation_status = "NOT_APPLICABLE"
+        required_reads = _strings(self.workflow_pack.get("required_reads", []), "required_reads")
+        material_read_refs = _strings(request.get("material_read_refs", []), "material_read_refs")
+        required_reads = list(dict.fromkeys([*required_reads, *material_read_refs]))
+        asset_refs = _strings(request.get("asset_refs", []), "asset_refs")
+        evidence_refs = _strings(request.get("evidence_refs", []), "evidence_refs")
+        material_reads = request.get("material_reads", [])
+        material_gaps = request.get("material_gaps", [])
+        recovered_decisions = request.get("recovered_decisions", [])
+        if not isinstance(material_reads, list) or not all(isinstance(item, Mapping) for item in material_reads):
+            raise ValueError("material_reads must be a list of objects")
+        if not isinstance(material_gaps, list) or not all(isinstance(item, Mapping) for item in material_gaps):
+            raise ValueError("material_gaps must be a list of objects")
+        if not isinstance(recovered_decisions, list) or not all(isinstance(item, Mapping) for item in recovered_decisions):
+            raise ValueError("recovered_decisions must be a list of objects")
         packet: dict[str, Any] = {
             "schema_version": 1, "type": "TaskPacket", "task_id": task_id,
             "project_id": project_id, "workflow_id": workflow_id, "task_type": task_type,
-            "maturity": maturity, "state": "ready", "required_reads": list(self.workflow_pack.get("required_reads", [])),
+            "maturity": maturity, "state": "ready", "required_reads": required_reads,
+            "asset_refs": asset_refs, "evidence_refs": evidence_refs,
+            "material_reads": _copy(material_reads), "material_gaps": _copy(material_gaps),
+            "recovered_decisions": _copy(recovered_decisions),
             "refs": refs, "relevant_failures": refs["failures"], "relevant_decisions": refs["decisions"],
             "relevant_cognition": refs["cognition"], "relevant_failure_refs": refs["failures"],
             "relevant_decision_refs": refs["decisions"], "relevant_cognition_refs": refs["cognition"],
