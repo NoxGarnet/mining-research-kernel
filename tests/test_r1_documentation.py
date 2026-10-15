@@ -95,12 +95,13 @@ class R1DocumentationTests(unittest.TestCase):
     def test_registration_is_strict_and_relative_root_is_host_selected(self):
         source = self.register()
         self.assertEqual("docs", source.root)
-        self.assertEqual(self.docs, source.root_path)
+        # Windows TEMP may use an 8.3 alias; registration resolves its host path.
+        self.assertEqual(self.docs.resolve(), source.root_path)
         self.assertEqual(PAGE, next(iter(source.pages)))
         original_cwd = Path.cwd()
         try:
             os.chdir(self.base.parent)
-            self.assertEqual(self.docs, source.root_path)
+            self.assertEqual(self.docs.resolve(), source.root_path)
         finally:
             os.chdir(original_cwd)
         for extra in ({"unexpected": True},):
