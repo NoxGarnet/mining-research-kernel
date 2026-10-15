@@ -251,6 +251,160 @@ def _current_workflow_pack(root: Path, packet: Mapping[str, Any]) -> Mapping[str
         return None
 
 
+def _material_ref_list(value: Any, field: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(item, str) and item.strip() for item in value):
+        raise ValueError(f"{field} must be a list of non-empty strings")
+    result = [_id(item.strip(), field) for item in value]
+    if len(set(result)) != len(result):
+        raise ValueError(f"{field} must not contain duplicates")
+    return result
+
+
+def _material_location_map(value: Any) -> dict[str, dict[str, str]]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("material_locations must be an object")
+    result: dict[str, dict[str, str]] = {}
+    for asset_id, locator in value.items():
+        asset_id = _id(asset_id, "material_locations asset_id")
+        if not isinstance(locator, Mapping) or not isinstance(locator.get("path"), str) or not locator["path"].strip():
+            raise ValueError(f"material_locations.{asset_id} must contain a non-empty path")
+        path = locator["path"].strip()
+        if Path(path).is_absolute() or path.startswith(("/", "\\")) or ":" in path or ".." in Path(path).parts:
+            raise ValueError(f"material_locations.{asset_id} must not contain an absolute or parent path")
+        path_kind = locator.get("path_kind", "workspace_relative")
+        if path_kind not in {"workspace_relative", "project_relative", "caller_label"}:
+            raise ValueError(f"material_locations.{asset_id}.path_kind is unsupported")
+        result[asset_id] = {"path": path, "path_kind": path_kind}
+    return result
+
+
+def _material_linkage(root: Path, request: Mapping[str, Any]) -> dict[str, Any]:
+    """Resolve explicit Asset/Evidence references without claiming substantive reading."""
+    asset_refs = _material_ref_list(request.get("asset_refs"), "asset_refs")
+    evidence_refs = _material_ref_list(request.get("evidence_refs"), "evidence_refs")
+    material_locations = _material_location_map(request.get("material_locations"))
+    task_kind = str(request.get("task_type", "")).rsplit(".", 1)[-1].casefold()
+    if task_kind == "evidence_review" and not evidence_refs:
+        raise ValueError("evidence_review requires at least one evidence_ref")
+
+    store = ResearchStore(root)
+    assets: dict[str, dict[str, Any]] = {}
+    evidences: dict[str, dict[str, Any]] = {}
+    for asset_id in asset_refs:
+        asset = store.latest_record(asset_id, "Asset")
+        if asset is None:
+            raise ValueError(f"unknown asset_ref: {asset_id}")
+        assets[asset_id] = asset
+    for evidence_id in evidence_refs:
+        evidence = store.latest_record(evidence_id, "Evidence")
+        if evidence is None:
+            raise ValueError(f"unknown evidence_ref: {evidence_id}")
+        asset_id = evidence.get("asset_ref")
+        if not isinstance(asset_id, str) or not asset_id.strip():
+            raise ValueError(f"evidence_ref has no asset_ref: {evidence_id}")
+        if asset_id not in assets:
+            asset = store.latest_record(asset_id, "Asset")
+            if asset is None:
+                raise ValueError(f"evidence_ref points to unknown asset: {asset_id}")
+            assets[asset_id] = asset
+            asset_refs.append(asset_id)
+        evidences[evidence_id] = evidence
+
+    evidence_by_asset: dict[str, list[str]] = {asset_id: [] for asset_id in asset_refs}
+    for evidence_id, evidence in evidences.items():
+        evidence_by_asset.setdefault(evidence["asset_ref"], []).append(evidence_id)
+
+    material_reads: list[dict[str, Any]] = []
+    material_gaps: list[dict[str, Any]] = []
+    blocking_reasons: list[str] = []
+    for asset_id in asset_refs:
+        asset = assets[asset_id]
+        locator = asset.get("locator")
+        if not isinstance(locator, Mapping) or not isinstance(locator.get("path"), str):
+            raise ValueError(f"asset has invalid locator: {asset_id}")
+        locator = copy.deepcopy(dict(locator))
+        path_kind = locator.get("path_kind")
+        locator_status = "caller_label"
+        content_status = "not_reloaded"
+        if path_kind == "project_relative":
+            try:
+                source_path = _project_path(root, locator["path"], f"asset_refs.{asset_id}.locator.path")
+            except ValueError as exc:
+                raise ValueError(f"asset has unsafe locator: {asset_id}") from exc
+            locator_status = "resolved" if source_path.is_file() else "missing"
+            if not source_path.is_file():
+                content_status = "missing"
+                blocking_reasons.append("material_source_missing")
+                material_gaps.append({
+                    "asset_id": asset_id,
+                    "reason": "material_source_missing",
+                    "next_action": "restore the registered project-relative source or register a new revision",
+                })
+            else:
+                current_hash = _sha256_bytes(source_path.read_bytes())
+                if current_hash == asset.get("content_sha256"):
+                    content_status = "hash_match"
+                else:
+                    content_status = "hash_mismatch"
+                    blocking_reasons.append("material_content_changed")
+                    material_gaps.append({
+                        "asset_id": asset_id,
+                        "reason": "material_content_changed",
+                        "next_action": "preserve the changed source and register a new material revision",
+                    })
+        elif path_kind == "caller_label":
+            material_gaps.append({
+                "asset_id": asset_id,
+                "reason": "caller_material_not_reloaded",
+                "next_action": "the Host must provide the caller-selected source again before substantive reading",
+            })
+        else:
+            raise ValueError(f"asset has unsupported locator kind: {asset_id}")
+
+        material_read = {
+            "asset_id": asset_id,
+            "evidence_refs": list(evidence_by_asset.get(asset_id, [])),
+            "locator": locator,
+            "asset_kind": asset.get("asset_kind"),
+            "authority": asset.get("authority"),
+            "asset_status": asset.get("status"),
+            "content_sha256": asset.get("content_sha256"),
+            "registration_status": "registered",
+            "locator_status": locator_status,
+            "content_status": content_status,
+            "reading_status": "NOT_READ",
+            "verification_status": "NOT_VERIFIED",
+        }
+        if asset_id in material_locations:
+            material_read["requested_locator"] = material_locations[asset_id]
+        material_reads.append(material_read)
+
+    stop_reason = None
+    resume_condition = None
+    if "material_source_missing" in blocking_reasons:
+        stop_reason = "material_source_missing"
+        resume_condition = "restore or re-register every missing project-relative material"
+    elif "material_content_changed" in blocking_reasons:
+        stop_reason = "material_content_changed"
+        resume_condition = "register a new material revision after deciding which source bytes are authoritative"
+    return {
+        "asset_refs": asset_refs,
+        "evidence_refs": evidence_refs,
+        "material_reads": material_reads,
+        "material_gaps": material_gaps,
+        "material_read_refs": [*(f"asset:{asset_id}" for asset_id in asset_refs),
+                                *(f"evidence:{evidence_id}" for evidence_id in evidence_refs)],
+        "assets": assets,
+        "evidences": evidences,
+        "stop_reason": stop_reason,
+        "resume_condition": resume_condition,
+    }
+
+
 def _task_failure_gate(root: Path, task_id: str, route_id: str,
                        request: Mapping[str, Any]) -> dict[str, Any]:
     """Load related failures from the durable store using task-start scope."""
@@ -271,6 +425,25 @@ def _task_failure_gate(root: Path, task_id: str, route_id: str,
             "failure_ids": blocking_ids,
             "related_failure_ids": sorted(related),
             "resume_condition": "resolve_or_scope_away_from_related_failures" if blocking_ids else None}
+
+
+def _decision_records_for_start(store: ResearchStore, request: Mapping[str, Any]) -> tuple[list[str], list[dict[str, Any]]]:
+    """Resolve explicit prior Decisions so a new task can recover judgment, not only material ids."""
+    refs_input = request.get("refs", {})
+    if refs_input is None:
+        refs_input = {}
+    if not isinstance(refs_input, Mapping):
+        raise ValueError("refs must be a mapping")
+    decision_refs = _material_ref_list(
+        request.get("decision_refs", refs_input.get("decisions", [])), "decision_refs"
+    )
+    records: list[dict[str, Any]] = []
+    for decision_id in decision_refs:
+        decision = store.latest_record(decision_id, "Decision")
+        if decision is None:
+            raise ValueError(f"unknown decision_ref: {decision_id}")
+        records.append(copy.deepcopy(decision))
+    return decision_refs, records
 
 
 def _literature_records(root: Path, project_id: str, task_id: str, request: Mapping[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -358,15 +531,28 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     request_value["claim_statement"] = claim_statement
     request_value["task_id"] = task_id
     route_id = ids["route"]
+    store = ResearchStore(root)
+    material_linkage = _material_linkage(root, request_value)
+    decision_refs, decision_records = _decision_records_for_start(store, request_value)
     engine_request = _request_for_engine(request_value, task_id, route_id)
+    engine_request.update({
+        "asset_refs": material_linkage["asset_refs"],
+        "evidence_refs": material_linkage["evidence_refs"],
+        "material_reads": material_linkage["material_reads"],
+        "material_gaps": material_linkage["material_gaps"],
+        "material_read_refs": material_linkage["material_read_refs"],
+        "recovered_decisions": decision_records,
+    })
     failure_gate = _task_failure_gate(root, task_id, route_id, request_value)
-    engine_request["refs"] = {"failures": failure_gate["related_failure_ids"]}
+    engine_request["refs"] = {"failures": failure_gate["related_failure_ids"], "decisions": decision_refs}
     documentation = None if documentation_result is None else load_json_value(documentation_result, "documentation-result")
     if documentation is not None and not isinstance(documentation, Mapping):
         raise ValueError("documentation-result must contain a JSON object")
     engine = _engine_for(project, engine_request, fake=False, documentation_result=documentation,
                          workflow_builder=_workflow_builder(request_value))
     packet = engine.start(engine_request)
+    if material_linkage["stop_reason"] and packet["state"] == "ready":
+        engine._blocked(packet, material_linkage["stop_reason"], material_linkage["resume_condition"])
     if failure_gate["status"] == "blocked":
         engine._blocked(packet, "unresolved_failure_gate", failure_gate["resume_condition"])
     source_refs = [_source_ref("task", task_id), _source_ref("operation", f"task-start.{task_id}")]
@@ -385,7 +571,7 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
                     expected_evidence=["task packet and bounded execution observation"],
                     assigned_role="execution_agent", verification_gates=packet.get("verification_gates", []),
                     stop_conditions=packet.get("stop_conditions", []), outputs=[], reservations=[],
-                    write_set=["research/records", "runs"], stop_reason=None)
+                    write_set=["research/records", "runs"], stop_reason=packet.get("stop_reason"))
     records = [question, claim, route,
                _record("TaskState", task_id, config["project_id"], source_refs,
                        task_id=task_id, state=packet["state"], packet=packet,
@@ -400,7 +586,18 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
         _relationship(_edge_id(task_id, "route-targets-claim"), "route_targets_claim", route, claim, config["project_id"], source_refs),
         *literature_relationships,
     ]
-    store = ResearchStore(root)
+    for index, asset_id in enumerate(material_linkage["asset_refs"]):
+        asset = material_linkage["assets"][asset_id]
+        relationships.append(_relationship(
+            _edge_id(task_id, f"reads-asset-{index}"), "route_reads_asset",
+            route, asset, config["project_id"], source_refs,
+        ))
+    for index, evidence_id in enumerate(material_linkage["evidence_refs"]):
+        evidence = material_linkage["evidences"][evidence_id]
+        relationships.append(_relationship(
+            _edge_id(task_id, f"reads-evidence-{index}"), "route_reads_evidence",
+            route, evidence, config["project_id"], source_refs,
+        ))
     operation_id = f"task-start.{task_id}"
     store.commit(operation_id, {"role": "planning_agent", "model": "r2.workflow"}, records, relationships)
     latest = store.latest_record(task_id, "TaskState")
@@ -417,6 +614,7 @@ def _method_for(task_type: str, workflow_id: str = "mining_research_kernel.workf
         "execution": f"mining_research_kernel.method.{family}.fake_execution",
         "static_check": f"mining_research_kernel.method.{family}.static_check",
         "syntax_change": f"mining_research_kernel.method.{family}.syntax_verification",
+        "evidence_review": f"mining_research_kernel.method.{family}.evidence_review",
     }.get(kind, f"mining_research_kernel.method.{family}.static_check")
 
 
@@ -450,6 +648,508 @@ def task_inspect(project_root: str | os.PathLike[str], task_id: str) -> dict[str
         packet["next_action"] = current_next_action
     packet["current_next_action"] = current_next_action
     return packet
+
+
+def task_record_evidence_review(project_root: str | os.PathLike[str], task_id: str,
+                                operation_id: str, assessment: Mapping[str, Any] | str) -> dict[str, Any]:
+    """Persist a bounded host read and provisional judgment for an evidence-review task.
+
+    This operation records what the Host actually read and what remains
+    unverified.  It deliberately creates a Decision and TaskState revision,
+    never a Run or Verification, and never changes Asset/Evidence provenance.
+    """
+    root = Path(project_root).expanduser().resolve()
+    task_id = _id(task_id, "task_id")
+    operation_id = _id(operation_id, "operation_id")
+    assessment_value = load_json_value(assessment, "assessment-json")
+    if not isinstance(assessment_value, Mapping):
+        raise ValueError("assessment-json must contain an object")
+    assessment_value = copy.deepcopy(dict(assessment_value))
+    scope = _require_string(assessment_value.get("scope"), "assessment.scope")
+    if scope != "material_reading_and_evidence_synthesis_only":
+        raise ValueError("assessment.scope must be material_reading_and_evidence_synthesis_only")
+    judgment = assessment_value.get("judgment")
+    if not isinstance(judgment, Mapping):
+        raise ValueError("assessment.judgment must be an object")
+    judgment = copy.deepcopy(dict(judgment))
+    judgment_status = _require_string(judgment.get("status"), "assessment.judgment.status")
+    if judgment_status not in {"PROVISIONAL_WITH_GAPS", "INSUFFICIENT"}:
+        raise ValueError("assessment.judgment.status must preserve an incomplete status")
+    judgment_summary = _require_string(judgment.get("summary"), "assessment.judgment.summary")
+    judgment_gaps = judgment.get("gaps")
+    if not isinstance(judgment_gaps, list) or not judgment_gaps:
+        raise ValueError("assessment.judgment.gaps must be a non-empty list")
+    next_action = judgment.get("next_action")
+    if not isinstance(next_action, Mapping) or not next_action:
+        raise ValueError("assessment.judgment.next_action must be a non-empty object")
+
+    store = ResearchStore(root)
+    prior = store.latest_record(task_id, "TaskState")
+    if prior is None:
+        raise ValueError(f"unknown task: {task_id}")
+    packet = copy.deepcopy(prior["packet"])
+    if packet.get("task_type", "").rsplit(".", 1)[-1].casefold() != "evidence_review":
+        raise ValueError("task type cannot record an evidence review")
+    if prior.get("state") not in {"ready", "blocked"}:
+        if prior.get("state") == "completed":
+            existing = prior.get("operation_results", {}).get(operation_id, {})
+            if isinstance(existing, Mapping) and existing.get("status") == "recorded":
+                if existing.get("assessment_sha256") != _sha256_json(assessment_value):
+                    raise ValueError("operation_id was already used with a different assessment")
+                return {**packet, "operation_id": operation_id,
+                        "operation_result": copy.deepcopy(existing)}
+        raise ValueError(f"task cannot record evidence review from state {prior.get('state')}")
+
+    packet_materials = packet.get("material_reads", [])
+    if not isinstance(packet_materials, list):
+        raise ValueError("task packet material_reads must be a list")
+    packet_by_asset = {item.get("asset_id"): item for item in packet_materials
+                       if isinstance(item, Mapping) and isinstance(item.get("asset_id"), str)}
+    entries = assessment_value.get("material_reads")
+    if not isinstance(entries, list) or len(entries) != len(packet_by_asset):
+        raise ValueError("assessment.material_reads must cover every packet material exactly once")
+    seen_assets: set[str] = set()
+    updated_materials: list[dict[str, Any]] = []
+    evidence_ids: list[str] = []
+    for entry_value in entries:
+        if not isinstance(entry_value, Mapping):
+            raise ValueError("assessment.material_reads entries must be objects")
+        entry = dict(entry_value)
+        asset_id = _id(entry.get("asset_id"), "assessment.material_reads.asset_id")
+        if asset_id in seen_assets or asset_id not in packet_by_asset:
+            raise ValueError(f"assessment does not match packet asset refs: {asset_id}")
+        seen_assets.add(asset_id)
+        packet_item = packet_by_asset[asset_id]
+        expected_evidence = set(packet_item.get("evidence_refs", []))
+        actual_evidence = entry.get("evidence_refs")
+        if not isinstance(actual_evidence, list) or set(actual_evidence) != expected_evidence:
+            raise ValueError(f"assessment evidence_refs do not match packet material: {asset_id}")
+        for evidence_id in actual_evidence:
+            _id(evidence_id, "assessment.material_reads.evidence_refs")
+            if evidence_id not in evidence_ids:
+                evidence_ids.append(evidence_id)
+        observed_hash = _require_string(entry.get("observed_sha256"), f"assessment.{asset_id}.observed_sha256")
+        if observed_hash != packet_item.get("content_sha256"):
+            raise ValueError(f"observed_sha256 does not match registered Asset hash: {asset_id}")
+        reading_status = _require_string(entry.get("reading_status"), f"assessment.{asset_id}.reading_status")
+        if reading_status not in {"READ", "READ_WITH_LIMITS", "READ_INSUFFICIENT", "REUSED_FROM_PERSISTED_RECORD"}:
+            raise ValueError(f"unsupported reading_status: {asset_id}")
+        reused_from_decision = entry.get("reused_from_decision")
+        if reading_status == "REUSED_FROM_PERSISTED_RECORD":
+            reused_from_decision = _id(reused_from_decision, f"assessment.{asset_id}.reused_from_decision")
+        verification_status = _require_string(entry.get("verification_status"), f"assessment.{asset_id}.verification_status")
+        if verification_status not in {"NOT_VERIFIED", "PARTIALLY_VERIFIED"}:
+            raise ValueError(f"evidence review cannot mark scientific verification complete: {asset_id}")
+        locator = entry.get("locator")
+        if not isinstance(locator, Mapping) or not locator:
+            raise ValueError(f"assessment.{asset_id}.locator must be a non-empty object")
+        summary = _require_string(entry.get("summary"), f"assessment.{asset_id}.summary")
+        numeric_status = _require_string(entry.get("numeric_check_status"), f"assessment.{asset_id}.numeric_check_status")
+        if numeric_status not in {"NOT_APPLICABLE", "CONSISTENT", "INCONSISTENT", "PARTIAL"}:
+            raise ValueError(f"unsupported numeric_check_status: {asset_id}")
+        scientific_status = _require_string(entry.get("scientific_validation_status"), f"assessment.{asset_id}.scientific_validation_status")
+        if scientific_status not in {"NOT_VERIFIED", "PARTIALLY_VERIFIED"}:
+            raise ValueError(f"evidence review cannot mark scientific validation complete: {asset_id}")
+        gaps = entry.get("gaps", [])
+        if not isinstance(gaps, list):
+            raise ValueError(f"assessment.{asset_id}.gaps must be a list")
+        updated = copy.deepcopy(dict(packet_item))
+        updated.update({
+            "content_status": ("reused_persisted_hash" if reading_status == "REUSED_FROM_PERSISTED_RECORD"
+                               else "host_reloaded_hash_match"),
+            "reading_status": reading_status,
+            "verification_status": verification_status,
+            "reading": {
+                "observed_sha256": observed_hash,
+                "locator": copy.deepcopy(dict(locator)),
+                "summary": summary,
+                "numeric_check_status": numeric_status,
+                "scientific_validation_status": scientific_status,
+                "gaps": copy.deepcopy(gaps),
+            },
+        })
+        if reused_from_decision is not None:
+            updated["reading"]["reused_from_decision"] = reused_from_decision
+        updated_materials.append(updated)
+    if seen_assets != set(packet_by_asset):
+        raise ValueError("assessment.material_reads omitted a packet material")
+
+    material_gaps = assessment_value.get("material_gaps", [])
+    if not isinstance(material_gaps, list):
+        raise ValueError("assessment.material_gaps must be a list")
+    normalized_gaps = []
+    for gap in material_gaps:
+        if not isinstance(gap, Mapping):
+            raise ValueError("assessment.material_gaps entries must be objects")
+        normalized_gaps.append({
+            "asset_id": _id(gap.get("asset_id"), "assessment.material_gaps.asset_id"),
+            "reason": _require_string(gap.get("reason"), "assessment.material_gaps.reason"),
+            "next_action": _require_string(gap.get("next_action"), "assessment.material_gaps.next_action"),
+        })
+
+    assessment_value["material_reads"] = copy.deepcopy(updated_materials)
+    assessment_value["material_gaps"] = copy.deepcopy(normalized_gaps)
+    assessment_digest = _sha256_json(assessment_value)
+    existing_results = prior.get("operation_results", {})
+    if not isinstance(existing_results, Mapping):
+        raise ValueError("TaskState operation_results must be an object")
+    existing = existing_results.get(operation_id)
+    if isinstance(existing, Mapping):
+        if existing.get("assessment_sha256") != assessment_digest:
+            raise ValueError("operation_id was already used with a different assessment")
+        return {**packet, "operation_id": operation_id,
+                "operation_result": copy.deepcopy(existing)}
+
+    route_ids = packet.get("routes", [])
+    if not isinstance(route_ids, list) or len(route_ids) != 1:
+        raise ValueError("evidence review requires exactly one route")
+    route_id = _id(route_ids[0], "packet route")
+    decision_id = "decision.material." + hashlib.sha256(
+        (task_id + "|" + operation_id + "|" + assessment_digest).encode("utf-8")
+    ).hexdigest()[:32]
+    source_refs = list(dict.fromkeys([
+        f"task:{task_id}", f"route:{route_id}", f"operation:{operation_id}",
+        *[f"asset:{asset_id}" for asset_id in sorted(packet_by_asset)],
+        *[f"evidence:{evidence_id}" for evidence_id in sorted(evidence_ids)],
+    ]))
+    decision = _record(
+        "Decision", decision_id, store.project_id, source_refs,
+        status=judgment_status.lower(), statement=judgment_summary,
+        scope={"project_id": store.project_id, "task_id": task_id, "route_id": route_id,
+               "kind": scope},
+        assessment=copy.deepcopy(assessment_value),
+        judgment=copy.deepcopy(judgment),
+        material_read_count=len(updated_materials),
+    )
+    relationships = []
+    for index, evidence_id in enumerate(sorted(evidence_ids)):
+        evidence = store.latest_record(evidence_id, "Evidence")
+        if evidence is None:
+            raise ValueError(f"unknown evidence reference in assessment: {evidence_id}")
+        relationships.append(_relationship(
+            _edge_id(task_id, f"decision-evidence-{index}"), "decision_records_evidence",
+            decision, evidence, store.project_id, source_refs,
+        ))
+
+    next_packet = copy.deepcopy(packet)
+    next_packet.update({
+        "state": "completed",
+        "review_status": "recorded",
+        "review_record_ref": decision_id,
+        "research_judgment_status": judgment_status,
+        "completion_scope": scope,
+        "material_reads": updated_materials,
+        "material_gaps": normalized_gaps,
+        "next_action": {
+            "action_id": None, "executable": False, "input_refs": [], "expected_outputs": [],
+            "preconditions": [], "reason": "material_review_recorded",
+            "resume_condition": "start a new scoped task with the Decision reference for the next validation",
+        },
+    })
+    next_packet.setdefault("history", []).append({
+        "event": "material_review_recorded", "from": prior.get("state"), "to": "completed",
+        "decision_id": decision_id, "scope": scope,
+    })
+    operation_result = {
+        "status": "recorded", "scope": scope, "task_id": task_id,
+        "decision_id": decision_id, "assessment_sha256": assessment_digest,
+        "material_count": len(updated_materials), "run_created": False,
+        "verification_created": False,
+    }
+    operation_results = copy.deepcopy(dict(existing_results))
+    operation_results[operation_id] = operation_result
+    task_record = _record(
+        "TaskState", task_id, store.project_id,
+        list(dict.fromkeys([*source_refs, f"decision:{decision_id}" ])),
+        revision=int(prior["revision"]) + 1, task_id=task_id, state="completed",
+        packet=next_packet, operation_results=operation_results,
+    )
+    try:
+        transaction = store.commit(
+            operation_id, {"role": "acceptance_agent", "model": "r2.workflow"},
+            [decision, task_record], relationships,
+            expected_revisions={task_id: int(prior["revision"])},
+        )
+    except ResearchStoreError:
+        latest = store.latest_record(task_id, "TaskState")
+        raced = latest.get("operation_results", {}).get(operation_id) if latest else None
+        if isinstance(raced, Mapping) and raced.get("assessment_sha256") == assessment_digest:
+            return {**latest["packet"], "operation_id": operation_id,
+                    "operation_result": copy.deepcopy(raced)}
+        raise
+    result = copy.deepcopy(next_packet)
+    result["operation_id"] = operation_id
+    result["operation_result"] = copy.deepcopy(operation_result)
+    result["decision"] = copy.deepcopy(decision)
+    result["transaction"] = transaction
+    return result
+
+
+def _validate_incremental_materials(
+    root: Path, store: ResearchStore, packet: Mapping[str, Any]
+) -> list[dict[str, Any]]:
+    """Check inherited source identity without claiming a new material read."""
+    material_reads = packet.get("material_reads", [])
+    if not isinstance(material_reads, list):
+        raise ValueError("packet.material_reads must be a list")
+    snapshots: list[dict[str, Any]] = []
+    for index, material in enumerate(material_reads):
+        field = f"packet.material_reads[{index}]"
+        if not isinstance(material, Mapping):
+            raise ValueError(f"{field} must be an object")
+        asset_id = _id(material.get("asset_id"), f"{field}.asset_id")
+        asset = store.latest_record(asset_id, "Asset")
+        if asset is None:
+            raise ValueError(f"{field}.asset_id references an unknown Asset")
+        locator = asset.get("locator") if isinstance(asset.get("locator"), Mapping) else {}
+        path_kind = locator.get("path_kind")
+        if path_kind == "project_relative":
+            source_path = _project_path(root, locator.get("path"), f"{field}.locator.path")
+            if not source_path.is_file():
+                raise ValueError(f"{field}.source is missing; inherited material must be re-registered")
+            expected_hash = asset.get("content_sha256") or material.get("content_sha256")
+            actual_hash = _sha256_bytes(source_path.read_bytes())
+            if expected_hash != actual_hash:
+                raise ValueError(
+                    f"{field}.source changed; register a new material revision before inheriting"
+                )
+        elif path_kind != "caller_label":
+            raise ValueError(f"{field}.locator.path_kind must be project_relative or caller_label")
+
+        evidence_revisions: dict[str, int] = {}
+        evidence_refs = material.get("evidence_refs", [])
+        if not isinstance(evidence_refs, list):
+            raise ValueError(f"{field}.evidence_refs must be a list")
+        for evidence_index, evidence_id in enumerate(evidence_refs):
+            evidence_id = _id(evidence_id, f"{field}.evidence_refs[{evidence_index}]")
+            evidence = store.latest_record(evidence_id, "Evidence")
+            if evidence is None:
+                raise ValueError(f"{field}.evidence_refs[{evidence_index}] references an unknown Evidence")
+            if evidence.get("asset_ref") != asset_id:
+                raise ValueError(
+                    f"{field}.evidence_refs[{evidence_index}] must reference asset {asset_id}"
+                )
+            evidence_revisions[evidence_id] = evidence.get("revision")
+        snapshots.append({
+            "asset_id": asset_id,
+            "asset_revision": asset.get("revision"),
+            "content_sha256": asset.get("content_sha256"),
+            "evidence_revisions": evidence_revisions,
+            "reading_status": material.get("reading_status"),
+            "verification_status": material.get("verification_status"),
+            "content_status": material.get("content_status"),
+        })
+    return snapshots
+
+
+def _validate_incremental_evidence(
+    store: ResearchStore, packet: Mapping[str, Any], base_decision: Mapping[str, Any],
+    supported_evidence: list[str]
+) -> None:
+    packet_materials = packet.get("material_reads", [])
+    packet_evidence: set[str] = set()
+    packet_assets: set[str] = set()
+    for material in packet_materials if isinstance(packet_materials, list) else []:
+        if not isinstance(material, Mapping):
+            continue
+        asset_id = material.get("asset_id")
+        if isinstance(asset_id, str):
+            packet_assets.add(asset_id)
+        for evidence_id in material.get("evidence_refs", []):
+            if isinstance(evidence_id, str):
+                packet_evidence.add(evidence_id)
+    base_refs = {item for item in base_decision.get("source_refs", []) if isinstance(item, str)}
+    for index, evidence_id in enumerate(supported_evidence):
+        field = f"update.supported_evidence[{index}]"
+        evidence = store.latest_record(evidence_id, "Evidence")
+        if evidence is None:
+            raise ValueError(f"unknown supported_evidence at {field}: {evidence_id}")
+        if evidence_id not in packet_evidence or evidence.get("asset_ref") not in packet_assets:
+            raise ValueError(f"{field} must reference an Evidence item in the current task material reads")
+        if f"evidence:{evidence_id}" not in base_refs and evidence_id not in packet_evidence:
+            raise ValueError(f"{field} is not supported by the base Decision")
+
+
+def task_record_judgment_update(project_root: str | os.PathLike[str], task_id: str,
+                                operation_id: str, update: Mapping[str, Any] | str) -> dict[str, Any]:
+    """Append a short judgment delta while inheriting the existing task state.
+
+    This is deliberately narrower than ``task_record_evidence_review``: the
+    caller cannot resubmit material reads or verification fields.  It appends
+    one Decision and one TaskState revision and keeps the prior Decision
+    immutable.
+    """
+    root = Path(project_root).expanduser().resolve()
+    task_id = _id(task_id, "task_id")
+    operation_id = _id(operation_id, "operation_id")
+    update_value = load_json_value(update, "update-json")
+    if not isinstance(update_value, Mapping):
+        raise ValueError("update-json must contain an object")
+    update_value = copy.deepcopy(dict(update_value))
+    encoded_size = len(json.dumps(update_value, ensure_ascii=False, indent=2))
+    if encoded_size > 2000:
+        raise ValueError("incremental judgment update must be <= 2000 Unicode characters")
+
+    base_decision_id = _id(update_value.get("base_decision_id"), "update.base_decision_id")
+    base_revision = update_value.get("base_revision")
+    if not isinstance(base_revision, int) or isinstance(base_revision, bool) or base_revision < 1:
+        raise ValueError("update.base_revision must be an integer >= 1")
+    change_kind = _require_string(update_value.get("change_kind"), "update.change_kind")
+    if change_kind not in {"supplement", "contradiction", "version_replacement"}:
+        raise ValueError("update.change_kind must be supplement, contradiction or version_replacement")
+    status = _require_string(update_value.get("status"), "update.status")
+    if status not in {"PROVISIONAL_WITH_GAPS", "INSUFFICIENT"}:
+        raise ValueError("update.status must be PROVISIONAL_WITH_GAPS or INSUFFICIENT; scientific verification is not accepted")
+    statement = _require_string(update_value.get("statement"), "update.statement")
+    supported_evidence = update_value.get("supported_evidence")
+    if not isinstance(supported_evidence, list) or not supported_evidence:
+        raise ValueError("update.supported_evidence must be a non-empty list of Evidence IDs")
+    supported_evidence = [_id(item, f"update.supported_evidence[{index}]") for index, item in enumerate(supported_evidence)]
+    gaps = update_value.get("gaps")
+    if not isinstance(gaps, list) or not gaps or not all(_is_nonempty_string(item) for item in gaps):
+        raise ValueError("update.gaps must be a non-empty list of non-empty strings")
+    next_action = update_value.get("next_action")
+    if not isinstance(next_action, Mapping) or not next_action:
+        raise ValueError("update.next_action must be a non-empty object with action and executable")
+    if not _is_nonempty_string(next_action.get("action")):
+        raise ValueError("update.next_action.action must be a non-empty string")
+    if not isinstance(next_action.get("executable"), bool):
+        raise ValueError("update.next_action.executable must be a boolean")
+    changed_fields = update_value.get("changed_fields")
+    if not isinstance(changed_fields, list) or not changed_fields:
+        raise ValueError("update.changed_fields must be a non-empty list")
+    allowed_fields = {"status", "summary", "supported_evidence", "gaps", "next_action", "scope"}
+    if not all(isinstance(item, str) and item in allowed_fields for item in changed_fields):
+        raise ValueError("update.changed_fields entries must be one of status, summary, supported_evidence, gaps, next_action, scope")
+
+    store = ResearchStore(root)
+    prior = store.latest_record(task_id, "TaskState")
+    if prior is None:
+        raise ValueError(f"unknown task: {task_id}")
+    packet = copy.deepcopy(prior["packet"])
+    if packet.get("task_type", "").rsplit(".", 1)[-1].casefold() != "evidence_review":
+        raise ValueError("task type cannot record an incremental judgment update")
+    existing_results = prior.get("operation_results", {})
+    if not isinstance(existing_results, Mapping):
+        raise ValueError("TaskState operation_results must be an object")
+    input_digest = _sha256_json(update_value)
+    existing = existing_results.get(operation_id)
+    if isinstance(existing, Mapping):
+        if existing.get("input_sha256") != input_digest:
+            raise ValueError("operation_id was already used with a different update")
+        return {**packet, "operation_id": operation_id, "operation_result": copy.deepcopy(existing)}
+
+    base_decision = store.latest_record(base_decision_id, "Decision")
+    if base_decision is None:
+        raise ValueError(f"unknown base_decision_id: {base_decision_id}")
+    if base_decision.get("revision") != base_revision:
+        raise ValueError("base_decision revision conflict; reload the current Decision")
+    base_refs = set(base_decision.get("source_refs", []))
+    current_review_ref = packet.get("review_record_ref")
+    if isinstance(current_review_ref, str) and current_review_ref != base_decision_id:
+        raise ValueError("base_decision_id does not match packet.review_record_ref; stale or incorrect inheritance")
+    if f"task:{task_id}" not in base_refs and current_review_ref != base_decision_id:
+        raise ValueError("base_decision_id is not related to this task")
+    _validate_incremental_evidence(store, packet, base_decision, supported_evidence)
+    inherited_material_revisions = _validate_incremental_materials(root, store, packet)
+
+    route_ids = packet.get("routes", [])
+    if not isinstance(route_ids, list) or len(route_ids) != 1:
+        raise ValueError("incremental judgment update requires exactly one route")
+    route_id = _id(route_ids[0], "packet route")
+    source_refs = list(dict.fromkeys([
+        f"task:{task_id}", f"route:{route_id}", f"operation:{operation_id}",
+        f"decision:{base_decision_id}",
+        *[f"evidence:{evidence_id}" for evidence_id in sorted(supported_evidence)],
+    ]))
+    decision_id = "decision.incremental." + hashlib.sha256(
+        (task_id + "|" + operation_id + "|" + input_digest).encode("utf-8")
+    ).hexdigest()[:32]
+    judgment = {
+        "status": status,
+        "summary": statement,
+        "supported_evidence": supported_evidence,
+        "gaps": copy.deepcopy(gaps),
+        "next_action": copy.deepcopy(dict(next_action)),
+        "inherited_from": {"decision_id": base_decision_id, "revision": base_revision},
+        "inherited_material_revisions": copy.deepcopy(inherited_material_revisions),
+    }
+    decision = _record(
+        "Decision", decision_id, store.project_id, source_refs,
+        status=status.lower(), statement=statement,
+        scope={"project_id": store.project_id, "task_id": task_id, "route_id": route_id,
+               "kind": "incremental_judgment_update", "change_kind": change_kind,
+               "base_decision_id": base_decision_id, "base_revision": base_revision},
+        judgment=judgment,
+        update={
+            "change_kind": change_kind,
+            "base_decision_id": base_decision_id,
+            "base_revision": base_revision,
+            "changed_fields": list(dict.fromkeys(changed_fields)),
+            "supported_evidence": supported_evidence,
+            "gaps": copy.deepcopy(gaps),
+            "next_action": copy.deepcopy(dict(next_action)),
+            "inherited_material_revisions": copy.deepcopy(inherited_material_revisions),
+        },
+        inherited_material_reads=True,
+    )
+    relationships = []
+    for index, evidence_id in enumerate(sorted(supported_evidence)):
+        evidence = store.latest_record(evidence_id, "Evidence")
+        relationships.append(_relationship(
+            _edge_id(task_id, f"{operation_id}-decision-evidence-{index}"),
+            "decision_records_evidence", decision, evidence, store.project_id, source_refs,
+        ))
+
+    next_packet = copy.deepcopy(packet)
+    next_packet.update({
+        "state": "completed",
+        "review_status": "incremental_update_recorded",
+        "review_record_ref": decision_id,
+        "research_judgment_status": status,
+        "incremental_update": {
+            "change_kind": change_kind,
+            "base_decision_id": base_decision_id,
+            "base_revision": base_revision,
+            "changed_fields": list(dict.fromkeys(changed_fields)),
+            "material_reads_inherited": True,
+            "inherited_material_revisions": copy.deepcopy(inherited_material_revisions),
+        },
+        "next_action": {
+            "action_id": None, "executable": False, "input_refs": [], "expected_outputs": [],
+            "preconditions": [], "reason": "incremental_judgment_recorded",
+            "resume_condition": "start a new scoped task with the new Decision reference",
+        },
+    })
+    next_packet.setdefault("history", []).append({
+        "event": "incremental_judgment_update", "from": prior.get("state"), "to": "completed",
+        "decision_id": decision_id, "base_decision_id": base_decision_id,
+        "base_revision": base_revision, "change_kind": change_kind,
+    })
+    operation_result = {
+        "status": "recorded", "task_id": task_id, "decision_id": decision_id,
+        "base_decision_id": base_decision_id, "base_revision": base_revision,
+        "input_sha256": input_digest, "input_unicode_chars": encoded_size,
+        "material_reads_inherited": True, "run_created": False, "verification_created": False,
+        "inherited_material_revisions": copy.deepcopy(inherited_material_revisions),
+    }
+    operation_results = copy.deepcopy(dict(existing_results))
+    operation_results[operation_id] = operation_result
+    task_record = _record(
+        "TaskState", task_id, store.project_id,
+        list(dict.fromkeys([*source_refs, f"decision:{decision_id}" ])),
+        revision=int(prior["revision"]) + 1, task_id=task_id, state="completed",
+        packet=next_packet, operation_results=operation_results,
+    )
+    transaction = store.commit(
+        operation_id, {"role": "acceptance_agent", "model": "r2.workflow"},
+        [decision, task_record], relationships,
+        expected_revisions={task_id: int(prior["revision"])},
+    )
+    result = copy.deepcopy(next_packet)
+    result.update({"operation_id": operation_id, "operation_result": copy.deepcopy(operation_result),
+                   "decision": copy.deepcopy(decision), "transaction": transaction})
+    return result
 
 
 def _latest_persisted_records(store: ResearchStore) -> dict[str, dict[str, Any]]:
@@ -884,6 +1584,10 @@ def task_run_fake(project_root: str | os.PathLike[str], task_id: str,
     packet = copy.deepcopy(prior["packet"])
     if packet.get("task_context") != "synthetic":
         raise ValueError("production tasks cannot use task-run-fake")
+    if packet.get("task_type", "").rsplit(".", 1)[-1].casefold() not in {
+        "fake_execution", "execution", "fixture_execution",
+    }:
+        raise ValueError("task type cannot use task-run-fake")
     if packet.get("state") not in {"ready", "failed"}:
         raise ValueError(f"task is not runnable: {packet.get('state')}")
     run_id = f"run-{hashlib.sha256((task_id + '|' + operation_id).encode('utf-8')).hexdigest()[:32]}"

@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -124,16 +125,54 @@ def _hash_document(value: dict[str, Any]) -> str:
 def _pid_alive(pid: Any) -> bool:
     if not isinstance(pid, int) or isinstance(pid, bool) or pid <= 0:
         return False
+    if os.name == "nt":
+        return _windows_pid_alive(pid)
     try:
         os.kill(pid, 0)
-    except ProcessLookupError:
+    except (ProcessLookupError, OverflowError):
         return False
-    except PermissionError:
-        # A permission failure does not establish that the owner ended.
-        return True
     except OSError:
-        return False
+        # An inability to inspect the owner is not proof that it ended.
+        return True
     return True
+
+
+def _windows_pid_alive(pid: int) -> bool:
+    """Inspect a process handle without sending a console event or signal."""
+    import _winapi
+
+    if pid > 0xFFFFFFFF:
+        return False
+    try:
+        handle = _winapi.OpenProcess(_winapi.SYNCHRONIZE, False, pid)
+    except OSError as exc:
+        # OpenProcess reports ERROR_INVALID_PARAMETER for a nonexistent PID.
+        # Access denied and other unknown states must preserve the writer lock.
+        return getattr(exc, "winerror", None) != 87
+    try:
+        try:
+            return _winapi.WaitForSingleObject(handle, 0) != _winapi.WAIT_OBJECT_0
+        except OSError:
+            return True
+    finally:
+        _winapi.CloseHandle(handle)
+
+
+def _publish_run_directory(temporary: Path, target: Path) -> None:
+    """Keep publication atomic while tolerating brief Windows sharing errors."""
+    delays = (0.01, 0.03, 0.07, 0.15) if os.name == "nt" else ()
+    for attempt in range(len(delays) + 1):
+        if os.path.lexists(target):
+            raise RunLedgerError(f"run already exists: {target.name}")
+        try:
+            os.replace(temporary, target)
+            return
+        except OSError as exc:
+            if os.path.lexists(target):
+                raise RunLedgerError(f"run already exists: {target.name}") from exc
+            if getattr(exc, "winerror", None) not in {5, 32, 33} or attempt == len(delays):
+                raise
+            time.sleep(delays[attempt])
 
 
 def _acquire_lock(run_dir: Path, operation_id: str) -> None:
@@ -321,7 +360,7 @@ def create_run(runs_root: str | Path, run_id: str, request: Any = None, inputs: 
         for stage in STAGES:
             _atomic_write(temp_dir / STAGE_FILES[stage], _stage_document(run_id, stage))
         _atomic_write(temp_dir / "manifest.json", manifest)
-        os.replace(temp_dir, run_dir)
+        _publish_run_directory(temp_dir, run_dir)
     except Exception:
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise

@@ -14,6 +14,7 @@ METHOD_IDS = (
     "mining_research_kernel.method.flac3d.syntax_verification",
     "mining_research_kernel.method.flac3d.static_check",
     "mining_research_kernel.method.flac3d.fake_execution",
+    "mining_research_kernel.method.flac3d.evidence_review",
 )
 
 _LEGACY_LAYERS = ("mcp_connectivity", "execution", "numerical", "physical", "engineering")
@@ -65,6 +66,7 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
         "static_check": ["static_check"],
         "fake_execution": ["execution"],
         "execution": ["execution"],
+        "evidence_review": [],
     }.get(kind, [])
     explicit = request.get("verification_gates", request.get("needs", ()))
     if isinstance(explicit, str):
@@ -103,11 +105,14 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
     read_order = ["existing_project", "known_workflow", "exploratory_inputs"]
     if "documentation" in selected:
         read_order.append("syntax_verification")
+    if kind == "evidence_review":
+        read_order.append("registered_materials")
     default_tools = {
         "syntax_change": ["documentation.verify_syntax"],
         "static_check": ["static_check"],
         "fake_execution": ["execution.fake"],
         "execution": ["execution"],
+        "evidence_review": ["evidence.read_only"],
     }.get(kind, [])
     requested_tools = request.get("allowed_tools", default_tools)
     synthetic_context = request.get("task_context", "production") == "synthetic"
@@ -120,6 +125,14 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
             "resume_condition": ("use a production FLAC3D static_check only after a real implementation is provided "
                                   "or registered"),
             "scope": "synthetic" if synthetic_context else "production",
+        },
+        "evidence_review": {
+            "capability_id": "mining_research_kernel.method.flac3d.evidence_review",
+            "available": True,
+            "state": "read_only_material_linking",
+            "reason": "registered_materials_are_explicitly_scoped",
+            "resume_condition": "provide explicit Asset/Evidence references for the task",
+            "scope": "read_only",
         },
     }
     return {
@@ -135,7 +148,7 @@ def build_flac3d_workflow_pack(project=None, request=None, providers=None, **kwa
         "execution_authorized": bool(project.get("execution_authorized", False)) and configured_execution != "disabled",
         "mutation_allowed": False,
         "read_order": read_order,
-        "required_reads": [entry, baseline],
+        "required_reads": [] if kind == "evidence_review" else [entry, baseline],
         "steps": ["read project entry and baseline", "inspect known workflow and failures",
                    "label exploratory assumptions", "perform the selected task action"],
         "verification_layers": list(_LEGACY_LAYERS),

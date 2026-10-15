@@ -1,6 +1,11 @@
-# v0.1.0 candidate acceptance summary
+# v0.1.0 Historical Public Acceptance Summary
 
-This is a public, sanitized summary for the code baseline
+This page preserves the identified v0.1.0 baseline results. Later local
+integration checks are recorded separately in
+[COMPLETION_STATUS.md](COMPLETION_STATUS.md#local-integration-candidate--2026-10-15).
+
+This is a public, sanitized acceptance summary for the v0.1.0 release. The
+tested code baseline is
 `35c141243e60f3386da1255530b17492f8e754e7`, accepted on 2026-09-09.
 The tests ran in a new local Git clone without shared objects or hardlinks,
 with an initially clean checkout that remained clean after acceptance.
@@ -42,7 +47,7 @@ filesystem changes and concurrent directory swapping remain outside the
 v0.1.0 boundary described in SECURITY.md. File-symlink creation failed with
 Windows error 1314, so that platform branch remains explicitly unverified.
 
-The earlier `72a2d6bcb80d6136c27d2aca61a0ce890f9ab9fd` acceptance recorded
+The earlier `72a2d6bcb80d6136c27d2aca61a0ce890f9ab9fd` candidate acceptance recorded
 200 tests (199 passed, one skipped). Those historical counts are not reused
 as results for the current baseline.
 
