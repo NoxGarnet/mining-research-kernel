@@ -1,5 +1,9 @@
 # Start with read-only project navigation
 
+For first-time use with existing files, see [bring an existing project](EXISTING_PROJECT.md).
+It explains how an Agent can add or update an entry without migrating materials.
+The command below remains read-only and never creates that entry itself.
+
 For a question about an existing project, you do not need to register files or
 create a Task first. From the repository directory:
 

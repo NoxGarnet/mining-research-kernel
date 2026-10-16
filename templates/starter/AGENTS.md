@@ -2,6 +2,8 @@
 
 - Read `INDEX.md`, then the selected project's `START.md` or `README.md`.
 - Read only materials needed for the current question; an index is navigation, not evidence.
+- The user decides the goal, deliverable, boundaries, and completion or handoff criteria. Recover decisions from the conversation and project entry; ask only about consequential gaps, without requiring all criteria upfront or reconfirming settled decisions.
+- Label user-confirmed decisions, Agent suggestions, and pending questions separately in the project entry when relevant. Follow later user changes; do not promote suggestions or unresolved findings into agreed follow-up work or new completion requirements. Continue authorized work within the agreed scope.
 - Ordinary reading with no substantive change does not require a research record or writeback. Existing user authorization continues within its stated scope.
 - State unknown software versions, inputs, and checks plainly. A registered adapter does not establish that its external tool is available.
 - For FLAC3D work, check applicable official documentation before relying on commands or parameters; report what was and was not checked.

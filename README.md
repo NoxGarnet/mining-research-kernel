@@ -8,8 +8,9 @@ offline examples use the Python standard library.
 ## Start or continue a project
 
 - [Start a lightweight workspace](docs/START_WORKSPACE.md): create the three-file entry and continue from a real research question.
+- [Bring an existing project](docs/EXISTING_PROJECT.md): keep its files in place, add only a missing entry, and hand off a bounded task.
 - [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
-- [First FLAC3D task](docs/FLAC3D_FIRST_TASK.md): identify inputs, version and a bounded first check.
+- [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
 
 Example (PowerShell):
 
@@ -25,6 +26,10 @@ repository. Keep research inputs and generated project files there.
 The lightweight entry does not configure a model, create a ledger or claim
 that FLAC3D/PFC/AE or any registered external tool is installed or available.
 Software versions, inputs and checks remain unknown until confirmed.
+
+For a worked, read-only example, open the [anonymous FLAC3D review](examples/flac3d_review/README.md).
+It demonstrates project entry, a limited source-backed review, and handoff;
+its teaching script is not an engineering model or a solver result.
 
 ## Why this exists
 
