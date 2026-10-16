@@ -1,0 +1,6 @@
+; Anonymous, fabricated text fixture for static file review only.
+; Not a runnable project model; no solver validation is implied.
+model new
+zone create brick size 1 1 1
+zone model assign elastic
+model solve
