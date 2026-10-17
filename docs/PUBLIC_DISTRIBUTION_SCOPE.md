@@ -19,6 +19,8 @@ Included:
 - bounded official HTML passage reading, a Host-selected documentation-only
   Itasca MCP client, and question-oriented literature comparison with page
   citations; all test sources remain authored synthetic material;
+- continued review tasks sharing an existing ResearchQuestion, read-only
+  progress recovery and regenerable Markdown reports derived from records;
 - the sanitized acceptance summary for the explicitly identified code
   baseline.
 

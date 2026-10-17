@@ -166,13 +166,14 @@ def _overview(asset, evidence, payload):
 
 
 def start_source_review(project_root, *, task_id: str, question: str, asset_refs: list[str], task_context="production",
-                        review_mode="combined_sources", dimensions=None) -> dict:
+                        review_mode="combined_sources", dimensions=None, _continuation=None,
+                        _research_tracking=False) -> dict:
     task_id, question = _id(task_id, "task_id"), question.strip() if isinstance(question, str) else ""
     if not question:
         raise ValueError("question must be a non-empty combined review question")
     if task_context not in {"production", "synthetic"}:
         raise ValueError("task_context must be production or synthetic")
-    if review_mode not in {"combined_sources", "literature_comparison"}:
+    if review_mode not in {"combined_sources", "literature_comparison", "selected_sources"}:
         raise ValueError("unsupported review_mode")
     if dimensions is None:
         dimensions = ["materials", "conditions", "methods", "parameters", "results", "applicability"]
@@ -231,8 +232,10 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
                 for a, o in zip(assets, overviews)]
     prior_decisions = _decisions_for_sources(store, {a["id"] for a in assets}, set(evidence_refs))
     fingerprint_value = {"question": question, "context": task_context, "bindings": bindings}
-    if review_mode == "literature_comparison":
+    if review_mode in {"literature_comparison", "selected_sources"}:
         fingerprint_value.update({"review_mode": review_mode, "dimensions": dimensions})
+    if _continuation is not None:
+        fingerprint_value["research_continuation"] = copy.deepcopy(dict(_continuation["continuation"]))
     fingerprint = _sha256_json(fingerprint_value)
     prior = store.latest_record(task_id, "TaskState")
     replayed = prior is not None
@@ -245,10 +248,10 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
             raise ValueError(f"task_id already exists with different source review inputs: {task_id}")
     else:
         stored_input = {"source_review_fingerprint": fingerprint, "source_bindings": bindings}
-        if review_mode == "literature_comparison":
+        if review_mode in {"literature_comparison", "selected_sources"} or _research_tracking or _continuation is not None:
             stored_input.update({"review_mode": review_mode, "dimensions": list(dimensions),
                                  "review_question": question})
-        packet = task_start(project_root, {
+        task_request = {
             "task_id": task_id, "task_context": task_context,
             "workflow_id": "research",
             "task_type": "mining_research_kernel.task.evidence_review",
@@ -257,11 +260,18 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
             "asset_refs": [a["id"] for a in assets], "evidence_refs": evidence_refs,
             "refs": {"decisions": prior_decisions},
             "input": stored_input,
-        })
+        }
+        if _continuation is not None:
+            task_request["input"]["research_question_id"] = _continuation["question_record"]["id"]
+        elif _research_tracking:
+            task_request["input"]["research_question_id"] = f"{task_id}.question.1"
+        packet = task_start(project_root, task_request,
+                            _validated_research_question=_continuation)
     review_template = ("## Summary\n<nonempty text>\n\n## Findings\n- <interpretation> [evidence:<id>]\n\n"
                        "## Gaps\n- <limits text>\n\n## Next\n<suggestion; user retains finish/next choice>\n")
     return {"task_packet": packet, "sources": overviews, "review_template": review_template,
-            "review_mode": review_mode, "dimensions": list(dimensions), "replayed": replayed}
+            "review_mode": review_mode, "dimensions": list(dimensions), "replayed": replayed,
+            "question_id": packet.get("input", {}).get("research_question_id", f"{task_id}.question.1")}
 
 
 def _parse_note(note: str, allowed: set[str]) -> dict[str, Any]:

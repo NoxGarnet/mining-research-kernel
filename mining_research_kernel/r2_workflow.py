@@ -533,7 +533,8 @@ def _literature_records(root: Path, project_id: str, task_id: str, request: Mapp
 
 
 def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] | str,
-               documentation_result: Mapping[str, Any] | str | None = None) -> dict[str, Any]:
+               documentation_result: Mapping[str, Any] | str | None = None, *,
+               _validated_research_question: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Start a task; documentation_result is reserved for trusted Host evidence.
 
     Hosts must obtain that argument from their DocumentationProvider, never
@@ -544,6 +545,10 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     if not isinstance(request_value, Mapping):
         raise ValueError("request-json must contain a JSON object")
     request_value = copy.deepcopy(dict(request_value))
+    supplied_input = request_value.get("input", {})
+    if (_validated_research_question is None and isinstance(supplied_input, Mapping)
+            and "research_continuation" in supplied_input):
+        raise ValueError("research_continuation metadata is reserved for validated continuation starts")
     if config.get("product") == "research":
         if "workflow_id" not in request_value and "workflow" not in request_value:
             request_value["workflow_id"] = "mining_research_kernel.workflow.research"
@@ -563,6 +568,31 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     request_value["task_id"] = task_id
     route_id = ids["route"]
     store = ResearchStore(root)
+    continuation = None
+    question_record = None
+    expected_revisions = {}
+    previous_route = None
+    if _validated_research_question is not None:
+        if not isinstance(_validated_research_question, Mapping):
+            raise ValueError("validated research question context must be an object")
+        question_record = copy.deepcopy(dict(_validated_research_question["question_record"]))
+        continuation = copy.deepcopy(dict(_validated_research_question["continuation"]))
+        expected_revisions = dict(_validated_research_question["expected_revisions"])
+        current_question = store.latest_record(question_record.get("id"), "ResearchQuestion")
+        if current_question != question_record:
+            raise ValueError("validated ResearchQuestion context does not match the stored record")
+        if question_record.get("type") != "ResearchQuestion" or question_record.get("project_id") != config["project_id"]:
+            raise ValueError("research question does not belong to this project")
+        if question_record.get("statement") != question_statement:
+            raise ValueError("research question statement is immutable")
+        expected_revisions[question_record["id"]] = question_record["revision"]
+        previous_route_id = _validated_research_question.get("previous_route_id")
+        if previous_route_id:
+            previous_route = store.latest_record(previous_route_id, "Route")
+            if (previous_route is None or previous_route.get("task_id") != continuation.get("previous_task_id")
+                    or previous_route.get("research_question_id", previous_route.get("question_id")) != question_record["id"]):
+                raise ValueError("previous Route does not match the validated task and ResearchQuestion")
+            expected_revisions[previous_route["id"]] = previous_route["revision"]
     material_linkage = _material_linkage(root, request_value)
     decision_refs, decision_records = _decision_records_for_start(store, request_value)
     engine_request = _request_for_engine(request_value, task_id, route_id)
@@ -587,13 +617,17 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     if failure_gate["status"] == "blocked":
         engine._blocked(packet, "unresolved_failure_gate", failure_gate["resume_condition"])
     source_refs = [_source_ref("task", task_id), _source_ref("operation", f"task-start.{task_id}")]
-    question = _record("ResearchQuestion", ids["question"], config["project_id"], source_refs,
-                       statement=question_statement, status="active")
+    question = question_record or _record("ResearchQuestion", ids["question"], config["project_id"], source_refs,
+                                         statement=question_statement, status="active")
+    if continuation:
+        packet["input"]["research_question_id"] = question["id"]
+        packet["input"]["research_continuation"] = copy.deepcopy(continuation)
     claim = _record("Claim", ids["claim"], config["project_id"], source_refs,
                     statement=claim_statement, status="proposed")
     route = _record("Route", route_id, config["project_id"], source_refs,
                     status="active", route_id=route_id, question_id=question["id"], research_question_id=question["id"], hypothesis_id=None,
-                    claim_id=claim["id"], task_id=task_id, parent_route_id=None,
+                    claim_id=claim["id"], task_id=task_id,
+                    parent_route_id=_validated_research_question.get("previous_route_id") if continuation else None,
                     supersedes_route_id=None,
                     workflow_id=packet["workflow_id"],
                     method_id=_method_for(packet["task_type"], packet["workflow_id"]),
@@ -603,7 +637,7 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
                     assigned_role="execution_agent", verification_gates=packet.get("verification_gates", []),
                     stop_conditions=packet.get("stop_conditions", []), outputs=[], reservations=[],
                     write_set=["research/records", "runs"], stop_reason=packet.get("stop_reason"))
-    records = [question, claim, route,
+    records = ([] if _validated_research_question is not None else [question]) + [claim, route,
                _record("TaskState", task_id, config["project_id"], source_refs,
                        task_id=task_id, state=packet["state"], packet=packet,
                        operation_results={})]
@@ -617,6 +651,9 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
         _relationship(_edge_id(task_id, "route-targets-claim"), "route_targets_claim", route, claim, config["project_id"], source_refs),
         *literature_relationships,
     ]
+    if previous_route is not None:
+        relationships.append(_relationship(_edge_id(task_id, "route-parent"), "route_child_of_route",
+                                            route, previous_route, config["project_id"], source_refs))
     for index, asset_id in enumerate(material_linkage["asset_refs"]):
         asset = material_linkage["assets"][asset_id]
         relationships.append(_relationship(
@@ -630,7 +667,13 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
             route, evidence, config["project_id"], source_refs,
         ))
     operation_id = f"task-start.{task_id}"
-    store.commit(operation_id, {"role": "planning_agent", "model": "r2.workflow"}, records, relationships)
+    if _validated_research_question is not None:
+        expected_revisions.update({item["asset_ref"]: item["revision"] for item in
+                                   engine_request.get("input", {}).get("source_bindings", [])})
+        for binding in engine_request.get("input", {}).get("source_bindings", []):
+            expected_revisions.update(binding.get("evidence_revisions", {}))
+    store.commit(operation_id, {"role": "planning_agent", "model": "r2.workflow"}, records, relationships,
+                 expected_revisions=expected_revisions or None)
     latest = store.latest_record(task_id, "TaskState")
     if latest is None:
         raise ResearchStoreError("task-start committed without TaskState")

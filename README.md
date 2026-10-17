@@ -11,6 +11,7 @@ offline examples use the Python standard library.
 - [Bring an existing project](docs/EXISTING_PROJECT.md): keep its files in place, add only a missing entry, and hand off a bounded task.
 - [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
 - [Optionally keep research records](docs/OPTIONAL_RESEARCH.md): enable an existing project, record a local documentation query, and recover its evidence and limits.
+- [Continue one research question](docs/CONTINUING_RESEARCH.md): let the Agent recover a prior judgment, add selected readings and generate a readable report with changes and gaps.
 - [Read documentation passages](docs/ITASCA_READING.md): read registered official HTML sections or query an existing Itasca MCP documentation connection, preserving their different provenance.
 - [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
@@ -115,6 +116,9 @@ an independent review.
 
 ## Current capabilities
 
+- Continued source review under one ResearchQuestion, retaining prior task and
+  judgment revisions, with read-only progress and regenerable Markdown reports;
+  see the [continuing research guide](docs/CONTINUING_RESEARCH.md).
 - Direct bounded Zotero search/page reading, cited source synthesis, and recovery;
   see the [research source workflow](docs/RESEARCH_SOURCES.md).
 - Bounded official local HTML passage reading and documentation-only Itasca MCP

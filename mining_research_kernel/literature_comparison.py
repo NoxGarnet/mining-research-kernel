@@ -19,7 +19,8 @@ _MAX_COLLECTION = 120
 
 
 def start_literature_comparison(project_root, *, task_id: str, question: str, asset_refs: list[str],
-                                dimensions=None, task_context="production") -> dict:
+                                dimensions=None, task_context="production", _continuation=None,
+                                _research_tracking=False) -> dict:
     """Start an explicit source-bound paper comparison; documentation Assets are optional."""
     dimensions = DEFAULT_DIMENSIONS if dimensions is None else dimensions
     if (not _bounded_text(question, "question") or not isinstance(dimensions, list)
@@ -29,7 +30,8 @@ def start_literature_comparison(project_root, *, task_id: str, question: str, as
         raise ValueError("question and 1..12 unique bounded dimensions are required")
     started = start_source_review(project_root, task_id=task_id, question=question, asset_refs=asset_refs,
                                   task_context=task_context, review_mode="literature_comparison",
-                                  dimensions=dimensions)
+                                  dimensions=dimensions, _continuation=_continuation,
+                                  _research_tracking=_research_tracking)
     question = started["task_packet"]["input"]["review_question"]
     sources = []
     summary_cells = []

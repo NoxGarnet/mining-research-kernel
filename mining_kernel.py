@@ -63,6 +63,49 @@ def inspect_source(workspace, source_id, *, registry: ExtensionRegistry | None =
     return _inspect_source(workspace, source_id, registry or registry_for_workspace(workspace),
                            reader=reader, operation=operation, params=params)
 
+def _write_research_report(project_root, task_id, output, markdown):
+    """Replace only this task's generated view, preserving project inputs."""
+    import hashlib
+    import os
+    from research_project import load_config
+    from mining_research_kernel.artifacts import _absolute_without_follow, _reject_reparse_chain, atomic_write_text
+    from mining_research_kernel.records import ID_RE, ResearchStore
+    if not isinstance(task_id, str) or not ID_RE.fullmatch(task_id):
+        raise ValueError("report task_id must be a valid record ID")
+    root = _absolute_without_follow(project_root)
+    _reject_reparse_chain(root, "project root")
+    selected = Path(output).expanduser()
+    target = _absolute_without_follow(selected if selected.is_absolute() else root / selected)
+    _reject_reparse_chain(target, "report output")
+    try:
+        relative = target.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("report output must stay inside the selected project") from exc
+    entry = load_config(root).get("entry", "START.md")
+    if (target.suffix.lower() != ".md" or target.name.casefold() in {"start.md", "readme.md", "agents.md", "index.md"}
+            or tuple(part.casefold() for part in relative.parts[:2]) == ("research", "records")
+            or relative.as_posix().casefold() == str(entry).replace("\\", "/").casefold()
+            or any(part.startswith(".") for part in relative.parts)):
+        raise ValueError("report output must be a separate Markdown view, outside project entries and records")
+    marker = f"<!-- MRK generated research report; task={task_id}; authority=derived -->\n"
+    if os.path.lexists(target):
+        if not target.is_file() or target.stat().st_nlink > 1:
+            raise ValueError("report output must be an ordinary file")
+        with target.open("rb") as stream:
+            if stream.read(len(marker.encode("utf-8"))) != marker.encode("utf-8"):
+                raise ValueError("report output already exists and is not this task's generated report")
+    for transaction in ResearchStore(root).list_transactions():
+        for record in transaction.get("records", []):
+            locator = record.get("locator", {})
+            if (record.get("type") == "Asset" and isinstance(locator, dict)
+                    and isinstance(locator.get("path"), str)
+                    and locator.get("path", "").replace("\\", "/").casefold() == relative.as_posix().casefold()):
+                raise ValueError("report output is a registered material; choose a separate derived file")
+    text = marker + markdown
+    atomic_write_text(target, text)
+    return relative.as_posix(), hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Filesystem-native mining research kernel")
     ap.add_argument("--workspace", default=".")
@@ -173,6 +216,27 @@ def main(argv=None):
     lr.add_argument("--operation-id", required=True)
     lr.add_argument("--comparison-file", required=True)
     lr.add_argument("--judgment", choices=("PROVISIONAL_WITH_GAPS", "INSUFFICIENT"), default="PROVISIONAL_WITH_GAPS")
+    rb = sub.add_parser("research-begin", help="begin a source review or comparison under one continuing question")
+    rb.add_argument("--project-root", required=True)
+    rb.add_argument("--task-id", required=True)
+    rb.add_argument("--question", required=True)
+    rb.add_argument("--asset-ref", action="append", required=True)
+    rb.add_argument("--mode", choices=("literature", "sources"), default="literature")
+    rb.add_argument("--dimension", action="append")
+    rb.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    rc = sub.add_parser("research-continue", help="continue a recorded judgment with selected existing or newly read sources")
+    rc.add_argument("--project-root", required=True)
+    rc.add_argument("--task-id", required=True)
+    rc.add_argument("--from-task", dest="from_task_id", required=True)
+    rc.add_argument("--asset-ref", action="append")
+    rc.add_argument("--reason")
+    rp = sub.add_parser("research-progress", help="recover the question, judgments and source changes along a named task lineage")
+    rp.add_argument("--project-root", required=True)
+    rp.add_argument("--task-id", required=True)
+    report = sub.add_parser("research-report", help="render a derived Markdown report from saved research records")
+    report.add_argument("--project-root", required=True)
+    report.add_argument("--task-id", required=True)
+    report.add_argument("--output", help="optional project-relative or in-project absolute Markdown output")
     init = sub.add_parser("init-flac3d-project")
     init.add_argument("path")
     init.add_argument("--project-id", required=True)
@@ -298,6 +362,38 @@ def main(argv=None):
         if packet["research_judgment_status"] == "INSUFFICIENT":
             print(json.dumps(out, ensure_ascii=False, indent=2))
             return 2
+    elif args.command in {"research-begin", "research-continue"}:
+        from mining_research_kernel.research_continuation import begin_research, continue_research
+        if args.command == "research-begin":
+            result = begin_research(args.project_root, task_id=args.task_id, question=args.question,
+                                    asset_refs=args.asset_ref, mode=args.mode, dimensions=args.dimension,
+                                    task_context=args.task_context)
+        else:
+            result = continue_research(args.project_root, task_id=args.task_id, from_task_id=args.from_task_id,
+                                       asset_refs=args.asset_ref, reason=args.reason)
+        packet = result["task_packet"]
+        out = {"type": "ContinuingResearchTask", "task_id": packet["task_id"],
+               "question_id": result["question_id"], "task_packet": packet, "state": packet["state"],
+               "asset_refs": packet["asset_refs"], "evidence_refs": packet["evidence_refs"],
+               "sources": result["sources"], "replayed": result["replayed"],
+               "continuation": packet.get("input", {}).get("research_continuation"),
+               "source_queries_performed": False}
+        for template in ("comparison_template", "review_template"):
+            if template in result:
+                out[template] = result[template]
+    elif args.command == "research-progress":
+        from mining_research_kernel.research_continuation import research_progress
+        out = research_progress(args.project_root, task_id=args.task_id)
+    elif args.command == "research-report":
+        from mining_research_kernel.research_report import render_research_report
+        markdown = render_research_report(args.project_root, task_id=args.task_id)
+        if args.output is None:
+            print(markdown, end="" if markdown.endswith("\n") else "\n")
+            return 0
+        target, digest = _write_research_report(args.project_root, args.task_id, args.output, markdown)
+        out = {"type": "ResearchReportReceipt", "task_id": args.task_id, "output": target,
+               "sha256": digest, "authority": "derived", "source_queries_performed": False,
+               "run_created": False, "verification_created": False}
     elif args.command == "literature-start":
         from mining_research_kernel.literature_comparison import start_literature_comparison
         result = start_literature_comparison(

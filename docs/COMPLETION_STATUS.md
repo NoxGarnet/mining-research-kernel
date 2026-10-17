@@ -1,5 +1,23 @@
 # Completion Status and Historical Acceptance
 
+## Continuing research — development batch 2026-10-17
+
+The [continuing research workflow](CONTINUING_RESEARCH.md) shares an existing
+ResearchQuestion across explicit follow-up tasks, preserves prior task and
+Decision revisions, and provides read-only progress and derived Markdown
+reports. The small project entry remains sufficient; the Agent can use these
+optional operations when a question needs durable supplementary readings.
+
+This batch builds on merged PR #7, main
+`7115c9afa0a5127e036e5fd6067e3ff1ecb1ca44`. Complete local Windows Python
+3.14.2 regression: 377 tests ran, 375 passed and two file-symlink cases were
+skipped for local permissions, with no failures. All 22 schemas and the
+standard-library examples passed. A bounded supplementary paper reading in an
+isolated copy of earlier records exercised the same-question continuation,
+changed provisional judgment, separate-process recovery and stable report
+regeneration. Original project records and selected source items remained
+unchanged. No solver run or scientific validation is implied by these checks.
+
 ## Current source workflows — 2026-10-17
 
 The lightweight workspace now supports optional durable research records,
