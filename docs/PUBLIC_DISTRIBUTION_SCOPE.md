@@ -16,6 +16,9 @@ Included:
   and explicit capture writeback, with authored synthetic examples only;
 - an explicit Host-selected read-only Zotero stdio client and a cited Markdown
   review that combines saved literature and documentation observations;
+- bounded official HTML passage reading, a Host-selected documentation-only
+  Itasca MCP client, and question-oriented literature comparison with page
+  citations; all test sources remain authored synthetic material;
 - the sanitized acceptance summary for the explicitly identified code
   baseline.
 
@@ -34,12 +37,15 @@ Capability labels used by the candidate:
 
 - `real implemented`: ResearchStore, TaskState, routes, Run Ledger,
   Evidence/Verification, Research Map, Cognition views, completion checks and
-  the version-bound documentation reader at its command-name-only boundary;
+  version-bound command-name checking, bounded documentation reading and
+  cited literature comparison (interpretations remain provisional);
 - `synthetic`: deterministic fixture workflow and fake execution paths;
 - `user-provided`: applicable Itasca local documentation registration,
-  sanitized Zotero snapshots and caller-injected read-only Zotero readers;
+  sanitized Zotero snapshots, read-only Zotero readers and an existing
+  documentation-only Itasca MCP runtime selected by the Host;
 - `unimplemented`: production FLAC3D `static_check`, real FLAC3D execution and
-  a complete `itasca-mcp` integration. The external provider is not bundled.
+  Itasca execution integration. The documentation-only connection is optional;
+  the external runtime is not bundled.
 
 The local acceptance commands are relative to the repository root:
 

@@ -28,6 +28,10 @@ that a complete model or engineering decision has been checked.
    name against a registered local HTML source. Its result covers command
    names only, not options, ordering, execution, or engineering applicability;
    manual source reading does not require a registration or research ledger.
+   For actual paragraph or keyword explanations, the optional
+   [documentation reading workflow](ITASCA_READING.md) reads bounded sections
+   from a registered official source. Its Itasca MCP route is useful for
+   discovery and derived reading, with provenance and version limits retained.
 4. **Do one bounded check.** Choose one check that advances the agreed task,
    such as comparing a command line or sequence in a named file against the
    matching reference. State exactly what was inspected. Keep static file
@@ -55,3 +59,8 @@ An end-to-end, file-only example is in
 [`examples/flac3d_review/`](../examples/flac3d_review/README.md). It shows a
 completed static command check against local FLAC3D 9.6.44 documentation; it
 does not claim a solver result.
+
+When the question needs evidence from several studies, use the optional
+[literature comparison](LITERATURE_COMPARISON.md) to distinguish conditions,
+methods, reported results and transferability. A condition missing from the
+pages read remains unknown; it is not assumed absent from the whole paper.

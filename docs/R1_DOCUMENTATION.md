@@ -8,6 +8,10 @@ To save an actual provider observation with its research question, evidence,
 and limits, use [optional research records](OPTIONAL_RESEARCH.md). The existing
 `documentation-check` operation below remains read-only.
 
+For paragraphs and keyword explanations beyond command names, use
+[documentation reading](ITASCA_READING.md). Reading a passage does not widen
+the verification scope of the command-name check documented here.
+
 ## What the check establishes
 
 The reader must open the registered HTML page, verify its pinned digest, read

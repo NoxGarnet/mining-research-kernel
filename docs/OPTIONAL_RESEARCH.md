@@ -2,6 +2,9 @@
 
 For literature, the [Zotero reading workflow](ZOTERO_READING.md) uses the same
 optional records for selected metadata/pages, interpretations, and recovery.
+For bounded official paragraphs and an optional documentation MCP connection,
+see [documentation reading](ITASCA_READING.md). For selected papers addressing
+one question, see [literature comparison](LITERATURE_COMPARISON.md).
 
 Ordinary Markdown navigation remains usable on its own. When a task needs
 durable questions, evidence, decisions, and recovery, an existing project can

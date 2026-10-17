@@ -11,7 +11,14 @@ offline examples use the Python standard library.
 - [Bring an existing project](docs/EXISTING_PROJECT.md): keep its files in place, add only a missing entry, and hand off a bounded task.
 - [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
 - [Optionally keep research records](docs/OPTIONAL_RESEARCH.md): enable an existing project, record a local documentation query, and recover its evidence and limits.
+- [Read documentation passages](docs/ITASCA_READING.md): read registered official HTML sections or query an existing Itasca MCP documentation connection, preserving their different provenance.
+- [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
+
+Give your Agent the question and material locations, for example:
+"比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。"
+The Agent can follow the relevant guide and enable the needed records or source
+connection within the agreed task. The same small workspace remains the entry.
 
 Example (PowerShell):
 
@@ -108,6 +115,14 @@ an independent review.
 
 ## Current capabilities
 
+- Direct bounded Zotero search/page reading, cited source synthesis, and recovery;
+  see the [research source workflow](docs/RESEARCH_SOURCES.md).
+- Bounded official local HTML passage reading and documentation-only Itasca MCP
+  queries through an explicit Host registration. MCP corpus content remains a
+  derived reading source; see [documentation reading](docs/ITASCA_READING.md).
+- Question-oriented comparison of distinct papers across selected dimensions,
+  with citations constrained to captured pages and provisional applicability
+  judgments; see [literature comparison](docs/LITERATURE_COMPARISON.md).
 - Portable blank FLAC3D project initialization and configuration-driven discovery.
 - Two read-only project adapters for a compatible mining-research workspace.
 - An explicit local HTML documentation check with source/version binding and
@@ -163,16 +178,17 @@ accepted stages and limits.
 The kernel mechanisms listed above are real filesystem and record operations;
 they are not fake results. Synthetic execution and static checking are fixture
 implementations for demonstration and do not establish FLAC3D behavior. A
-production user must provide an applicable Itasca local documentation source
-registration. The implemented documentation check is version-bound and
+production user of the command-name check must provide an applicable Itasca
+local documentation source registration. That check is version-bound and
 limited to `command_name_only`; it does not establish parameters, scripts,
 numerical validity or engineering suitability. Production FLAC3D `static_check`
 and live Itasca execution remain unimplemented.
 
-The external `itasca-mcp` integration is optional caller/provider territory;
-this repository does not bundle it or provide a complete switch-on path. Any
-future integration needs its own registration, authorization and engineering
-verification.
+The optional external `itasca-mcp` documentation connection uses a Host-selected
+existing stdio runtime. It calls only documentation search/browse tools, without
+an engine bridge or model execution. This repository does not bundle that
+runtime. Community corpus output does not independently authenticate an
+official page or its exact build. Execution integration remains separate work.
 
 ## Capability classification
 
@@ -180,8 +196,8 @@ verification.
 |---|---|
 | Real kernel mechanisms | ResearchStore, TaskState, routes, Run Ledger, Evidence/Verification, Research Map, Cognition views and completion checks. |
 | Synthetic | Fixture projects, deterministic fake execution and synthetic static checking. |
-| User-provided resources | Version-matched Itasca local documentation and registration; sanitized Zotero snapshots, a caller-injected read-only reader, or an existing Zotero stdio runtime selected through an explicit Host registration. |
-| Unimplemented | Production FLAC3D `static_check`, real FLAC3D execution and complete `itasca-mcp` integration. |
+| User-provided resources | Version-matched Itasca local documentation and registration; an existing Itasca documentation MCP runtime; sanitized Zotero snapshots, a caller-injected read-only reader, or an existing Zotero stdio runtime selected through an explicit Host registration. |
+| Unimplemented | Production FLAC3D `static_check`, real FLAC3D execution and Itasca execution integration. |
 
 The [public acceptance summary](docs/ACCEPTANCE_SUMMARY.md) records the
 versioned code baseline and separates these categories from validation claims.

@@ -136,6 +136,26 @@ class SourceReviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "source Asset or Evidence revision or hash changed"):
             self.start()
 
+    def test_legacy_combined_review_fingerprint_replays(self):
+        started = self.start()
+        store = ResearchStore(self.project)
+        original = store.latest_record("combined-review", "TaskState")
+        changed = copy.deepcopy(original)
+        changed["revision"] += 1
+        inputs = changed["packet"]["input"]
+        inputs.pop("review_mode", None)
+        inputs.pop("dimensions", None)
+        inputs.pop("review_question", None)
+        inputs["source_review_fingerprint"] = _sha256_json({
+            "question": "How does the saved literature relate to the documentation?",
+            "context": "synthetic", "bindings": inputs["source_bindings"],
+        })
+        store.commit("legacy-combined-review-state", {"role": "test", "model": "fixture"}, [changed],
+                     expected_revisions={original["id"]: original["revision"]})
+        replay = self.start()
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(started["task_packet"]["task_id"], replay["task_packet"]["task_id"])
+
     def test_malformed_embedded_capture_is_rejected_by_capture_validator(self):
         store = ResearchStore(self.project)
         asset = store.latest_record(self.refs()[0], "Asset")
@@ -250,6 +270,45 @@ class SourceReviewTests(unittest.TestCase):
         self.assertIn("coverage_scope=none", gaps)
         self.assertIn("command='zone list'", gaps)
         self.assertEqual("INSUFFICIENT", decision["judgment"]["status"])
+
+    def test_discovery_only_is_preserved_but_not_citable_as_read_text(self):
+        store = ResearchStore(self.project)
+        docs_id = self.refs()[1]
+        original = store.latest_record(docs_id, "Asset")
+        changed = copy.deepcopy(original)
+        changed["revision"] += 1
+        result = changed["payload"]["documentation_result"]
+        uncovered = ["official_source_identity_unverified", "mcp_version_unverified",
+                     "reference_version_applicability_unverified"]
+        result.update(status="DISCOVERY_ONLY", coverage_scope="discovery_only", uncovered=uncovered,
+                      passages=[{"text": "Saved bounded discovery result", "locator": "zone list"}])
+        changed["content_sha256"] = _sha256_json(changed["payload"])
+        store.commit("discovery-only-doc-revision", {"role": "test", "model": "fixture"}, [changed],
+                     expected_revisions={docs_id: original["revision"]})
+        started = start_source_review(self.project, task_id="discovery-review",
+                                      question="What can these saved observations support?",
+                                      asset_refs=self.refs(), task_context="synthetic")
+        docs_source = next(item for item in started["sources"] if item["asset_ref"] == docs_id)
+        self.assertEqual("DISCOVERY_ONLY", docs_source["query_result"]["status"])
+        self.assertEqual("Saved bounded discovery result", docs_source["saved_passages"][0]["text"])
+        note_with_discovery_claim = (
+            "## Summary\nA discovery result is available.\n\n## Findings\n"
+            f"- The passage establishes the claim. [evidence:{docs_source['evidence_refs'][0]}]\n\n"
+            "## Gaps\n- Discovery is not passage reading.\n\n## Next\nThe user chooses whether to read further.\n")
+        with self.assertRaisesRegex(ValueError, "unknown or unselected Evidence"):
+            record_source_review(self.project, task_id="discovery-review", operation_id="discovery-citation",
+                                 note=note_with_discovery_claim)
+        note_without_claim = (
+            "## Summary\nThe saved records are insufficient for a supported comparison.\n\n"
+            "## Findings\n\n## Gaps\n- Discovery does not establish passage content.\n\n"
+            "## Next\nThe user chooses whether to read a specific source passage.\n")
+        recorded = record_source_review(self.project, task_id="discovery-review", operation_id="discovery-gaps",
+                                        note=note_without_claim, judgment_status="INSUFFICIENT")
+        decision = ResearchStore(self.project).latest_record(recorded["review_record_ref"], "Decision")
+        self.assertEqual("READ_INSUFFICIENT", next(row for row in decision["assessment"]["material_reads"]
+                                                     if row["asset_id"] == docs_id)["reading_status"])
+        self.assertTrue(set(uncovered).issubset(set(decision["judgment"]["gaps"])))
+        self.assertFalse(any("query was unverified or failed" in gap for gap in decision["judgment"]["gaps"]))
 
 
 if __name__ == "__main__":

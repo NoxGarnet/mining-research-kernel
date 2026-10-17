@@ -131,6 +131,48 @@ def main(argv=None):
     rv.add_argument("--operation-id", required=True)
     rv.add_argument("--review-file", required=True)
     rv.add_argument("--judgment", choices=("PROVISIONAL_WITH_GAPS", "INSUFFICIENT"), default="PROVISIONAL_WITH_GAPS")
+    iq = sub.add_parser("itasca-query", help="query only documentation tools on an explicitly selected Itasca MCP Host")
+    iq.add_argument("--registration", required=True)
+    iq.add_argument("--operation", required=True, choices=("itasca_query_command", "itasca_browse_commands", "itasca_browse_reference"))
+    iq.add_argument("--software", required=True, choices=("flac", "pfc", "3dec", "mpoint", "massflow"))
+    iq.add_argument("--version", required=True, choices=("6.0", "7.0", "9.0"))
+    iq.add_argument("--query")
+    iq.add_argument("--command", dest="itasca_command")
+    iq.add_argument("--topic")
+    iq.add_argument("--limit", type=int, default=10)
+    iq.add_argument("--max-reading-chars", type=int, default=12000)
+    rd = sub.add_parser("documentation-read", help="read bounded documentation passages and save source coverage")
+    rd.add_argument("--project-root", required=True)
+    rd.add_argument("--task-id", required=True)
+    rd.add_argument("--question", required=True)
+    rd.add_argument("--registration", required=True)
+    rd.add_argument("--provider", choices=("local", "itasca"), default="local")
+    rd.add_argument("--page")
+    rd.add_argument("--product")
+    rd.add_argument("--product-version")
+    rd.add_argument("--anchor")
+    rd.add_argument("--operation", choices=("itasca_query_command", "itasca_browse_commands", "itasca_browse_reference"))
+    rd.add_argument("--software", choices=("flac", "pfc", "3dec", "mpoint", "massflow"))
+    rd.add_argument("--version", choices=("6.0", "7.0", "9.0"))
+    rd.add_argument("--query")
+    rd.add_argument("--command", dest="itasca_command")
+    rd.add_argument("--topic")
+    rd.add_argument("--limit", type=int, default=10)
+    rd.add_argument("--max-reading-chars", type=int, default=12000)
+    rd.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    lc = sub.add_parser("literature-start", help="prepare a question-oriented comparison of selected distinct papers")
+    lc.add_argument("--project-root", required=True)
+    lc.add_argument("--task-id", required=True)
+    lc.add_argument("--question", required=True)
+    lc.add_argument("--asset-ref", action="append", required=True)
+    lc.add_argument("--dimension", action="append", help="comparison dimension; repeat to select explicit dimensions")
+    lc.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    lr = sub.add_parser("literature-review", help="save a comparison with citations to captured page ranges")
+    lr.add_argument("--project-root", required=True)
+    lr.add_argument("--task-id", required=True)
+    lr.add_argument("--operation-id", required=True)
+    lr.add_argument("--comparison-file", required=True)
+    lr.add_argument("--judgment", choices=("PROVISIONAL_WITH_GAPS", "INSUFFICIENT"), default="PROVISIONAL_WITH_GAPS")
     init = sub.add_parser("init-flac3d-project")
     init.add_argument("path")
     init.add_argument("--project-id", required=True)
@@ -225,6 +267,73 @@ def main(argv=None):
         if result.get("status") != "PASS" or packet["research_judgment_status"] == "INSUFFICIENT":
             print(json.dumps(out, ensure_ascii=False, indent=2))
             return 2
+    elif args.command == "itasca-query":
+        from providers.itasca import query_itasca
+        out = query_itasca(args.registration, operation=args.operation, software=args.software,
+                           version=args.version, query=args.query, command=args.itasca_command,
+                           topic=args.topic, limit=args.limit, max_reading_chars=args.max_reading_chars)
+        if out.get("status") not in {"READ_WITH_LIMITS", "DISCOVERY_ONLY"}:
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 2
+    elif args.command == "documentation-read":
+        from mining_research_kernel.documentation_reading import record_documentation_reading
+        result = record_documentation_reading(
+            args.project_root, task_id=args.task_id, question=args.question,
+            registration=args.registration, provider=args.provider, page=args.page,
+            product=args.product, product_version=args.product_version, anchor=args.anchor,
+            operation=args.operation, software=args.software, version=args.version,
+            query=args.query, command=args.itasca_command, topic=args.topic, limit=args.limit,
+            max_reading_chars=args.max_reading_chars, task_context=args.task_context,
+        )
+        packet = result["task_packet"]
+        out = {"type": "DocumentationReadingReceipt", "task_id": packet["task_id"],
+               "decision_id": result["decision_id"], "asset_refs": packet["asset_refs"],
+               "evidence_refs": packet["evidence_refs"], "documentation_result": result["documentation_result"],
+               "reading_texts": result.get("reading_texts", []), "replayed": result["replayed"],
+               "query_performed": result.get("query_performed", False),
+               "source_read_performed": result.get("source_read_performed", False),
+               "state": packet["state"], "completion_scope": packet.get("completion_scope"),
+               "research_judgment_status": packet["research_judgment_status"],
+               "run_created": False, "verification_created": False}
+        if packet["research_judgment_status"] == "INSUFFICIENT":
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 2
+    elif args.command == "literature-start":
+        from mining_research_kernel.literature_comparison import start_literature_comparison
+        result = start_literature_comparison(
+            args.project_root, task_id=args.task_id, question=args.question, asset_refs=args.asset_ref,
+            dimensions=args.dimension, task_context=args.task_context)
+        packet = result["task_packet"]
+        out = {"type": "LiteratureComparisonStart", "task_id": packet["task_id"],
+               "state": packet["state"], "asset_refs": packet["asset_refs"],
+               "evidence_refs": packet["evidence_refs"], "sources": result["sources"],
+               "comparison_template": result["comparison_template"], "replayed": result["replayed"],
+               "source_queries_performed": False}
+    elif args.command == "literature-review":
+        from mining_research_kernel.literature_comparison import record_literature_comparison
+        with Path(args.comparison_file).expanduser().open("rb") as stream:
+            raw = stream.read(256 * 1024 + 1)
+        if len(raw) > 256 * 1024:
+            raise ValueError("literature comparison exceeds 256 KiB")
+        def unique_comparison_object(pairs):
+            value = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ValueError("literature comparison has duplicate JSON keys")
+                value[key] = item
+            return value
+        comparison = json.loads(raw.decode("utf-8-sig"), object_pairs_hook=unique_comparison_object,
+                                parse_constant=lambda _: (_ for _ in ()).throw(ValueError("invalid JSON number")))
+        result = record_literature_comparison(
+            args.project_root, task_id=args.task_id, operation_id=args.operation_id,
+            comparison=comparison, judgment_status=args.judgment)
+        packet = result["task_packet"]
+        out = {"type": "LiteratureComparisonReceipt", "task_id": packet["task_id"],
+               "state": packet["state"], "decision_id": packet["review_record_ref"],
+               "completion_scope": packet.get("completion_scope"),
+               "asset_refs": packet["asset_refs"], "evidence_refs": packet["evidence_refs"],
+               "research_judgment_status": packet["research_judgment_status"],
+               "source_queries_performed": False, "run_created": False, "verification_created": False}
     elif args.command == "research-start":
         from mining_research_kernel.source_review import start_source_review
         result = start_source_review(args.project_root, task_id=args.task_id,

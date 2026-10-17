@@ -4,6 +4,8 @@ The registration file is an explicit host-side trust input. A query, an
 index, or an injected callback cannot establish document identity. This module
 verifies one small unit: the command name in a real Syntax section. It does
 not validate FISH grammar, options, combinations, or whole scripts.
+The separate passage-reading API uses the same registration to read bounded
+explanations without claiming syntax or engineering verification.
 """
 from __future__ import annotations
 
@@ -638,3 +640,268 @@ def verify_syntax(config: Mapping[str, Any], topic: str, command: str | None = N
         official_lookup=kwargs.pop("official_lookup", None),
         installed_lookup=kwargs.pop("installed_lookup", None),
     ).verify_syntax(topic, command, **kwargs)
+
+
+# Bounded passage reading shares this provider's registered HTML boundary.
+MAX_TRANSIENT_CHARS = 12_000
+MAX_SAVED_CHARS = 2_000
+_HIDDEN_TAGS = {"aside", "footer", "nav", "noscript", "script", "style"}
+
+
+def _visible_text(node: Any) -> str:
+    if node is None:
+        return ""
+    if node.tag in _HIDDEN_TAGS:
+        return ""
+    parts = []
+    for child in node.children:
+        if isinstance(child, str):
+            parts.append(child)
+        elif child.tag not in _HIDDEN_TAGS:
+            parts.append(_visible_text(child))
+    return " ".join(" ".join(parts).split())
+
+
+def _section_heading(section: Any) -> str | None:
+    if section is None:
+        return None
+    heading = next((node for node in _descendants(section)
+                    if node.tag in {"h1", "h2", "h3", "h4"}), None)
+    return _visible_text(heading) or None
+
+
+def _paragraph_passages(body: Any) -> list[tuple[str, str | None, str | None]]:
+    """Collect main-body paragraphs once, carrying their current section heading."""
+    found: list[tuple[str, str | None, str | None]] = []
+
+    def visit(node: Any, section_id: str | None = None,
+              heading: str | None = None) -> tuple[str | None, str | None]:
+        if node.tag in _HIDDEN_TAGS:
+            return section_id, heading
+        for child in node.children:
+            if isinstance(child, str) or child.tag in _HIDDEN_TAGS:
+                continue
+            if child.tag == "section":
+                visit(child, child.attrs.get("id") or section_id, None)
+            elif child.tag in {"h1", "h2", "h3", "h4"}:
+                heading = _visible_text(child) or heading
+            elif child.tag == "p":
+                text = _visible_text(child)
+                if text:
+                    found.append((text, section_id, heading))
+            else:
+                section_id, heading = visit(child, section_id, heading)
+        return section_id, heading
+
+    main = next((node for node in _descendants(body)
+                 if node.tag == "main" or node.attrs.get("role", "").casefold() == "main"
+                 or node.attrs.get("id", "").casefold() == "main"), None)
+    visit(main or body)
+    return found
+
+
+def _bounded_result(source: Any, page: Any, product: Any, anchor: Any) -> dict[str, Any]:
+    return {
+        "status": "CANNOT_READ",
+        "stop_reason": "invalid_request",
+        "diagnostics": [],
+        "coverage_scope": "documentation_passage_reading_only",
+        "citation": {
+            "source_id": getattr(source, "source_id", None),
+            "product": product,
+            "document_family": getattr(source, "document_family", None),
+            "document_build": getattr(source, "document_build", None),
+            "page": page,
+            "anchor": anchor,
+            "trust_class": getattr(source, "trust_class", None),
+            "sha256_body": None,
+        },
+        "passages": [],
+        "reading_texts": [],
+        "uncovered": ["parameter_combinations", "full_script", "numerical_validity",
+                      "engineering_suitability"],
+        "applicability_status": "INSUFFICIENT",
+        "_query_performed": False,
+    }
+
+
+def read_local_documentation(
+    registration: Any,
+    *,
+    page: str,
+    product: str,
+    product_version: str,
+    anchor: str | None = None,
+    max_reading_chars: int = MAX_TRANSIENT_CHARS,
+    task_context: str = "production",
+) -> dict[str, Any]:
+    """Read only bounded visible passages from a pinned, version-matched page."""
+    source = registration
+    if isinstance(source, (str, Path)):
+        try:
+            source = load_registration(source)
+        except ValueError:
+            source = None
+    result = _bounded_result(source, page, product, anchor)
+
+    def fail(reason: str, *, attempted: bool = False) -> dict[str, Any]:
+        result["stop_reason"] = reason
+        result["diagnostics"] = [reason]
+        result["_query_performed"] = attempted
+        return result
+
+    if task_context not in {"production", "synthetic"}:
+        return fail("task_context_invalid")
+    if type(max_reading_chars) is not int or max_reading_chars < 1:
+        return fail("max_reading_chars_invalid")
+    max_reading_chars = min(max_reading_chars, MAX_TRANSIENT_CHARS)
+    if source is None:
+        return fail("registration_required")
+    if source.trust_class == "synthetic" and task_context != "synthetic":
+        return fail("synthetic_source_not_for_production")
+    if source.trust_class == "official_local" and task_context != "production":
+        return fail("official_source_requires_production_context")
+    try:
+        page = _safe_page_path(page, field_name="page")
+    except (ValueError, TypeError):
+        return fail("page_path_invalid")
+    if product != source.product:
+        return fail("target_product_mismatch")
+    if product_version not in {source.document_family, source.document_build}:
+        return fail("target_product_version_mismatch")
+    if anchor is not None and (not isinstance(anchor, str) or not anchor.strip()):
+        return fail("anchor_invalid")
+    if page not in source.pages:
+        return fail("page_not_registered")
+
+    root = source.root_path.resolve()
+    product_root = (source.root_path / source.product_subdir).resolve()
+    path = (source.root_path / Path(*PurePosixPath(page).parts)).resolve()
+    if not _is_relative_to(path, root) or not _is_relative_to(path, product_root):
+        return fail("page_path_outside_registered_product_root")
+    result["_query_performed"] = True
+    try:
+        body = path.read_bytes()
+    except OSError:
+        return fail("page_missing_or_unreadable", attempted=True)
+    body_hash = hashlib.sha256(body).hexdigest()
+    result["citation"].update(sha256_body=body_hash, checked_at=_now())
+    if body_hash != source.pages[page]:
+        return fail("page_hash_drift", attempted=True)
+    try:
+        parser = _DocumentParser()
+        parser.feed(body.decode("utf-8"))
+        parser.close()
+    except (UnicodeError, ValueError):
+        return fail("html_unreadable", attempted=True)
+    family, build = _extract_metadata(parser)
+    if family != source.document_family:
+        return fail("document_family_mismatch" if family else "document_family_unreadable", attempted=True)
+    if build != source.document_build:
+        return fail("document_build_mismatch" if build else "document_build_unreadable", attempted=True)
+
+    sections = _descendants(parser.root, "section")
+    candidates: list[tuple[str, str | None, str | None]] = []
+    if anchor is not None:
+        anchor_id = anchor.lstrip("#")
+        target = next((node for node in _descendants(parser.root)
+                       if node.attrs.get("id") == anchor_id), None)
+        if target is None:
+            return fail("anchor_not_found", attempted=True)
+        locator = target.attrs.get("id")
+        section = next((node for node in sections
+                        if node is target or target in _descendants(node)), None)
+        heading = _section_heading(section)
+        if target.tag == "dt":
+            parent = next((node for node in _descendants(parser.root)
+                           if target in node.children), None)
+            if parent is not None:
+                index = parent.children.index(target)
+                definition = next((node for node in parent.children[index + 1:]
+                                   if getattr(node, "tag", None) == "dd"), None)
+                text = _visible_text(definition)
+            else:
+                text = ""
+        elif target.tag == "section":
+            text = _visible_text(target)
+        elif target.tag in {"h1", "h2", "h3", "h4"}:
+            text = _visible_text(target)
+            parent = next((node for node in _descendants(parser.root)
+                           if target in node.children), None)
+            if parent is not None:
+                index = parent.children.index(target)
+                following = []
+                for node in parent.children[index + 1:]:
+                    if getattr(node, "tag", None) in {"h1", "h2", "h3", "h4"}:
+                        break
+                    if not isinstance(node, str):
+                        value = _visible_text(node)
+                        if value:
+                            following.append(value)
+                text = " ".join([text, *following]).strip()
+        else:
+            text = _visible_text(target)
+        if text:
+            candidates.append((text, locator or page, heading))
+    else:
+        body_node = next((node for node in _descendants(parser.root) if node.tag == "body"), parser.root)
+        candidates = _paragraph_passages(body_node)
+        if not candidates:
+            candidates = [(_visible_text(section), section.attrs.get("id"), _section_heading(section))
+                          for section in sections if _visible_text(section)]
+
+    if not candidates:
+        return fail("passage_not_found", attempted=True)
+
+    passages: list[dict[str, Any]] = []
+    reading_texts: list[dict[str, Any]] = []
+    transient_total = 0
+    saved_total = 0
+    for text, locator, heading in candidates:
+        transient_room = max_reading_chars - transient_total
+        if transient_room <= 0:
+            break
+        transient_excerpt = text[:transient_room]
+        transient_truncated = len(transient_excerpt) < len(text)
+        transient = {
+            "text": transient_excerpt,
+            "truncated": transient_truncated,
+            "original_char_count": len(text),
+            "locator": locator or page,
+        }
+        reading_texts.append(transient)
+        transient_total += len(transient_excerpt)
+
+        saved_room = MAX_SAVED_CHARS - saved_total
+        if saved_room <= 0:
+            continue
+        saved_excerpt = transient_excerpt[:saved_room]
+        saved_total += len(saved_excerpt)
+        passages.append({
+            **transient,
+            "text": saved_excerpt,
+            "truncated": transient_truncated or len(saved_excerpt) < len(transient_excerpt),
+            "sha256": hashlib.sha256(saved_excerpt.encode("utf-8")).hexdigest(),
+            "heading": heading,
+        })
+
+    total_candidate_chars = sum(len(text) for text, _, _ in candidates)
+    reading_truncated = total_candidate_chars > transient_total
+    saved_text_truncated = saved_total < transient_total
+
+    result.update({
+        "status": "READ_WITH_LIMITS",
+        "stop_reason": "bounded_passages_read",
+        "diagnostics": ["registered_page_hash_matched", "document_version_matched"],
+        "passages": passages,
+        "reading_texts": reading_texts,
+        "reading_truncated": reading_truncated,
+        "saved_text_truncated": saved_text_truncated,
+        "applicability_status": "LIMITED",
+        "_query_performed": True,
+    })
+    if source.trust_class == "synthetic":
+        result["diagnostics"].append("synthetic_source")
+    if reading_truncated:
+        result["diagnostics"].append("reading_text_budget_truncated_remaining_passages")
+    return result
