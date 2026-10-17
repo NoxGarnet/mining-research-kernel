@@ -132,7 +132,7 @@ class ProjectContextTests(unittest.TestCase):
             result = project_context(self.root)
         self.assertEqual(1, result["counts"]["entries"])
         materials = [i for i in result["items"] if i["kind"] == "material"]
-        self.assertEqual({str(self.root / "notes/source.txt"), str(self.root / "notes/other.txt")},
+        self.assertEqual({str((self.root / "notes/source.txt").resolve()), str((self.root / "notes/other.txt").resolve())},
                          {i["location"]["path"] for i in materials})
         self.assertEqual(before, self.snapshot())
 
