@@ -355,7 +355,7 @@ and holds no MCP credentials. A sanitized snapshot is a local input artifact;
 a real-time reader is a separate caller-injected capability. Missing or failed
 readers degrade to explicit diagnostics.
 
-The five allowed operations are:
+The allowed operations are:
 
 ```text
 zotero_get_collections
@@ -363,7 +363,16 @@ zotero_get_collection_items
 zotero_get_item_metadata
 zotero_get_item_children
 zotero_get_item_fulltext
+zotero_search_items
+zotero_read_pdf_pages
 ```
+
+The [Zotero reading workflow](docs/ZOTERO_READING.md) adds bounded external
+metadata/page captures and explicit writeback into optional research records.
+`zotero-record` imports a capture with source identity, versions, page coverage,
+and optional interpretations; it does not contact Zotero or certify a fresh
+source check. The external reader remains a Host-provided capability. See the
+[offline synthetic example](examples/zotero_reading/README.md).
 
 Original PDFs and other primary sources remain authoritative. Zotero metadata,
 snapshots, OCR, Markdown, and MCP responses are rebuildable relation or

@@ -12,6 +12,8 @@ Included:
 - public documentation of implemented behavior, synthetic behavior and
   explicitly unimplemented capabilities;
 - the read-only Zotero snapshot adapter and its sanitized fixture contract.
+- bounded Zotero reading capture validation, caller-injected read collection,
+  and explicit capture writeback, with authored synthetic examples only;
 - the sanitized acceptance summary for the explicitly identified code
   baseline.
 

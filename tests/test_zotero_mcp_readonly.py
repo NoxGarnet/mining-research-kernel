@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from adapters.zotero_mcp_readonly import FulltextUnavailableError, ItemReadError
+from adapters.zotero_mcp_readonly import FulltextUnavailableError, ItemReadError, dispatch as zotero_dispatch
 from extension_registry import DEFAULT_REGISTRY, ExtensionRecord, ExtensionRegistry
 from mining_kernel import discover_all, discover_sources, inspect_source
 from support import make_synthetic_workspace
@@ -60,6 +60,28 @@ class ZoteroMcpReadonlyTests(unittest.TestCase):
         self.assertEqual("CANNOT_VERIFY", result["status"])
         self.assertEqual("operation_not_allowed", result["diagnostics"][0]["code"])
         self.assertEqual([], called)
+
+    def test_new_read_operations_fail_closed_on_mcp_errors(self):
+        cases = (
+            ("zotero_search_items", {"content": [{"type": "text", "text":
+                "Error fetching Zotero search results: [WinError 5] access denied"}]}),
+            ("zotero_get_collections", {"content": [{"type": "text", "text":
+                "# Zotero Collections\n\nError fetching collections: [WinError 5] access denied"}]}),
+            ("zotero_read_pdf_pages", {"isError": True, "content": [{"type": "text", "text": "reader failed"}]}),
+        )
+        for operation, response in cases:
+            with self.subTest(operation=operation):
+                result = zotero_dispatch(Path("."), action="inspect", reader=lambda op, params: response,
+                                          operation=operation, params={})
+                self.assertEqual("CANNOT_VERIFY", result["status"])
+                self.assertEqual("source_read_failed", result["diagnostics"][0]["code"])
+
+    def test_error_word_inside_well_formed_pdf_page_is_not_transport_failure(self):
+        response = {"content": [{"type": "text", "text":
+            "# PDF Pages 1-1 of PDF\n**Item Key:** PDFKEY01\n## Page 1\nError: article body text"}]}
+        result = zotero_dispatch(Path("."), action="inspect", reader=lambda op, params: response,
+                                 operation="zotero_read_pdf_pages", params={})
+        self.assertEqual("PASS", result["status"])
 
     def test_expected_failures_degrade_with_stable_diagnostics(self):
         cases = (
