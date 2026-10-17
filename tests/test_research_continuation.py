@@ -214,4 +214,3 @@ class ContinuationRaceTests(unittest.TestCase):
             continue_research(other, task_id="foreign-child", from_task_id="project-boundary-parent",
                               asset_refs=self.assets)
         self.assertIsNone(ResearchStore(other).latest_record("foreign-child", "TaskState"))
-
