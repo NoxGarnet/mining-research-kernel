@@ -21,6 +21,8 @@ Included:
   citations; all test sources remain authored synthetic material;
 - continued review tasks sharing an existing ResearchQuestion, read-only
   progress recovery and regenerable Markdown reports derived from records;
+- compact recovery of version-bound inherited judgments and an offline,
+  authored two-session continuation example without a source connection;
 - the sanitized acceptance summary for the explicitly identified code
   baseline.
 

@@ -69,6 +69,68 @@ def _unique_strings(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if isinstance(value, str) and value.strip()))
 
 
+def _record_revision(store: ResearchStore, record_id: str, revision: int,
+                    record_type: str | None = None) -> dict[str, Any] | None:
+    for transaction in store.list_transactions():
+        for record in transaction.get("records", []):
+            if (record.get("id") == record_id and record.get("revision") == revision
+                    and (record_type is None or record.get("type") == record_type)):
+                return copy.deepcopy(record)
+    return None
+
+
+def _decision_bound_to_task_state(store: ResearchStore, task: dict[str, Any]) -> dict[str, Any] | None:
+    packet = task.get("packet", {})
+    decision_id = packet.get("review_record_ref")
+    if not isinstance(decision_id, str):
+        return None
+    for transaction in store.list_transactions():
+        records = transaction.get("records", [])
+        has_state = any(record.get("type") == "TaskState" and record.get("id") == task.get("id")
+                        and record.get("revision") == task.get("revision") for record in records)
+        if has_state:
+            decision = next((record for record in records if record.get("type") == "Decision"
+                             and record.get("id") == decision_id), None)
+            if decision:
+                return copy.deepcopy(decision)
+    return None
+
+
+def _continuation_parent(store: ResearchStore, task_id: str, packet: dict[str, Any]) -> dict[str, Any] | None:
+    """Validate persisted continuation lineage and return its exact bound parent Decision."""
+    continuation = packet.get("input", {}).get("research_continuation")
+    if not isinstance(continuation, dict):
+        return None
+    from mining_research_kernel.research_continuation import research_progress
+
+    progress = research_progress(store.project_root, task_id=task_id)
+    if len(progress.get("steps", [])) < 2:
+        raise ValueError("research continuation has no validated parent step")
+    parent = progress["steps"][-2]
+    decision_id = continuation.get("previous_decision_id")
+    decision_revision = continuation.get("previous_decision_revision")
+    if (parent.get("task_id") != continuation.get("previous_task_id")
+            or parent.get("task_revision") != continuation.get("previous_task_revision")
+            or parent.get("decision_id") != decision_id
+            or parent.get("decision_revision") != decision_revision):
+        raise ValueError("research continuation parent does not match its validated lineage")
+    record = _record_revision(store, decision_id, decision_revision, "Decision")
+    if record is None:
+        raise ValueError(f"continuation references unavailable Decision revision: {decision_id}@{decision_revision}")
+    return record
+
+
+def is_research_review_task(packet: dict[str, Any]) -> bool:
+    inputs = packet.get("input") if isinstance(packet.get("input"), dict) else {}
+    return (packet.get("workflow_id") in {"research", "mining_research_kernel.workflow.research"}
+            and inputs.get("review_mode") in {"combined_sources", "literature_comparison", "selected_sources"})
+
+
+def is_research_review_continuation(packet: dict[str, Any]) -> bool:
+    inputs = packet.get("input") if isinstance(packet.get("input"), dict) else {}
+    return is_research_review_task(packet) and isinstance(inputs.get("research_continuation"), dict)
+
+
 def _question_and_routes(
     latest: dict[str, dict[str, Any]], packet: dict[str, Any]
 ) -> tuple[str, str | None, list[dict[str, Any]]]:
@@ -98,7 +160,8 @@ def _question_and_routes(
 
 
 def _decision_records(
-    latest: dict[str, dict[str, Any]], task_id: str, packet: dict[str, Any], route_ids: list[str]
+    latest: dict[str, dict[str, Any]], task_id: str, packet: dict[str, Any], route_ids: list[str],
+    *, exact_decisions: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     decision_ids: list[str] = []
     decision_ids.extend(item for item in packet.get("relevant_decision_refs", []) if isinstance(item, str))
@@ -120,11 +183,15 @@ def _decision_records(
             related.append(record)
             decision_ids.append(record["id"])
     by_id = {record["id"]: record for record in related}
+    for record in exact_decisions or []:
+        if record.get("type") == "Decision" and record.get("id") in by_id:
+            by_id[record["id"]] = record
     return [by_id[item] for item in dict.fromkeys(decision_ids) if item in by_id]
 
 
 def _decision_selection(
-    records: list[dict[str, Any]], task_id: str, packet: dict[str, Any]
+    records: list[dict[str, Any]], task_id: str, packet: dict[str, Any],
+    inherited: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Separate current judgments from explicit history and unresolved branches.
 
@@ -203,6 +270,25 @@ def _decision_selection(
             conflict_ids = list(current_ids)
             history_ids.update(set(candidates) - set(current_ids))
 
+    if inherited and not (isinstance(review_ref, str) and review_ref in by_id):
+        inherited_ids = {item.get("id") for item in inherited}
+        ancestors_of_inherited = set().union(*(ancestors(item) for item in inherited_ids if item in by_id))
+        current_ids = []
+        conflicts = []
+        for record_id, record in by_id.items():
+            if record_id in inherited_ids or record_id in ancestors_of_inherited:
+                continue
+            refs_for_record = _source_refs(record)
+            same_task = f"task:{task_id}" in refs_for_record or (
+                isinstance(record.get("scope"), dict) and record["scope"].get("task_id") == task_id
+            )
+            if same_task:
+                conflicts.append(record)
+        conflict_ids = [record.get("id") for record in conflicts]
+        history_ids.update(record_id for record_id in by_id if record_id not in inherited_ids
+                           and record_id not in conflict_ids)
+        selection_reason = "pending_continuation_inherits_parent"
+
     # Preserve explicitly cited records that are not part of the current
     # branch as history; they remain discoverable through citations/show.
     history_ids.update(record_id for record_id in explicit_refs if record_id in by_id and record_id not in current_ids)
@@ -217,6 +303,7 @@ def _decision_selection(
         "current_ids": [record.get("id") for record in current],
         "history_ids": [record.get("id") for record in history],
         "conflict_ids": [record.get("id") for record in conflicts],
+        "inherited": inherited or [],
         "review_record_ref": review_ref if isinstance(review_ref, str) else None,
         "reason": selection_reason,
     }
@@ -359,7 +446,8 @@ def _actions(packet: dict[str, Any], decisions: list[dict[str, Any]]) -> list[di
     return actions
 
 
-def _commands(project_root: Path, task_id: str, decision_ids: list[str]) -> list[str]:
+def _commands(project_root: Path, task_id: str, decision_ids: list[str],
+              decisions: list[dict[str, Any]] | None = None) -> list[str]:
     # The project root is already present in the CLI invocation.  Keeping the
     # placeholder here prevents repeated long private paths from consuming the
     # default recovery budget; callers substitute the displayed project root.
@@ -367,8 +455,11 @@ def _commands(project_root: Path, task_id: str, decision_ids: list[str]) -> list
         f'python mining_kernel.py show --project-root "<project-root>" --record-id {task_id} --section packet',
     ]
     if decision_ids:
+        by_id = {item.get("id"): item for item in decisions or []}
+        decision = by_id.get(decision_ids[0], {})
         commands.append(
-            f'python mining_kernel.py show --project-root "<project-root>" --record-id {decision_ids[0]} --section judgment'
+            f'python mining_kernel.py show --project-root "<project-root>" --record-id {decision_ids[0]} '
+            f'--revision {decision.get("revision")} --section judgment'
         )
     return commands
 
@@ -451,8 +542,7 @@ def _overflow_view(
                 kind = str(source)
             if kind not in source_kinds:
                 source_kinds.append(kind)
-        label = ",".join(source_kinds) or "record"
-        compact_gaps.append(f"[{label}] {_preview(text, 80)}")
+        compact_gaps.append(_preview(text, 80))
     compact_attempts = {
         "routes": [
             {key: route.get(key) for key in ("id", "revision", "status", "runs_used", "stop_reason") if route.get(key) is not None}
@@ -471,6 +561,8 @@ def _overflow_view(
         "current_decision_ids": current_ids,
         "historical_decision_count": len(history_ids),
         "historical_decision_ids": history_ids,
+        "inherited_decisions": [{"decision_id": item.get("id"), "revision": item.get("revision"),
+                                  "state": "inherited_pending"} for item in selection.get("inherited", [])],
     }
     if conflict_ids:
         selection_view["unresolved_conflict"] = {
@@ -493,6 +585,15 @@ def _overflow_view(
             "source_bytes_reopened": False,
         },
         "judgments": compact_judgments,
+        "inherited_judgments": [
+            {"decision_id": item.get("decision_id"), "revision": item.get("revision"),
+             "status": item.get("status"), "summary": _preview(item.get("summary", ""), 360),
+             "scope": "historical parent judgment; applicability remains bounded by recorded gaps",
+             "gap_count": len(item.get("gaps", [])),
+             "gap_preview": [_preview(gap, 100) for gap in item.get("gaps", [])[:2]],
+             "state": "inherited_pending"}
+            for item in full.get("inherited_judgments", [])
+        ],
         "judgment_selection": selection_view,
         "attempts_and_stops": compact_attempts,
         "gaps": {"count": len(gaps), "items": compact_gaps, "full_available": True},
@@ -598,6 +699,15 @@ def _overflow_view(
                 "source_bytes_reopened": False,
             },
             "judgments": current_judgments,
+            "inherited_judgments": [
+                {"decision_id": item.get("decision_id"), "revision": item.get("revision"),
+                 "status": item.get("status"), "summary": _preview(item.get("summary", ""), 180),
+             "scope": "historical parent judgment",
+             "gap_count": len(item.get("gaps", [])),
+             "gap_preview": [_preview(gap, 55) for gap in item.get("gaps", [])[:1]],
+                 "state": "inherited_pending"}
+                for item in full.get("inherited_judgments", [])[:1]
+            ],
             "judgment_selection": selection_view,
             "gaps": {"count": len(gaps), "items": first_gap, "full_available": True},
             "candidate_actions": [
@@ -654,7 +764,12 @@ def resume_task(project_root: str | Path, task_id: str, *, max_chars: int = DEFA
     question, question_id, routes = _question_and_routes(latest, packet)
     route_ids = [item["id"] for item in routes]
     related_decisions = _decision_records(latest, task_id, packet, route_ids)
-    selection = _decision_selection(related_decisions, task_id, packet)
+    inherited = _continuation_parent(store, task_id, packet) if is_research_review_continuation(packet) else None
+    bound_current = _decision_bound_to_task_state(store, task)
+    exact = [record for record in (inherited, bound_current) if record is not None]
+    related_decisions = _decision_records(latest, task_id, packet, route_ids, exact_decisions=exact)
+    selection = _decision_selection(related_decisions, task_id, packet,
+                                    [inherited] if inherited and not packet.get("review_record_ref") else None)
     current_decisions = selection["current"]
     materials = _material_versions(latest, packet, related_decisions)
     failures = _related_failures(latest, task_id, route_ids)
@@ -683,7 +798,8 @@ def resume_task(project_root: str | Path, task_id: str, *, max_chars: int = DEFA
     # Expansion is for the current branch, not whichever related Decision was
     # encountered first in the transaction stream.  Historical IDs remain in
     # citations/selection and can be queried explicitly when needed.
-    commands = _commands(root, task_id, selection.get("current_ids", []))
+    commands = _commands(root, task_id, selection.get("current_ids", [])
+                          or [item.get("id") for item in selection.get("inherited", [])], related_decisions)
     full = {
         "schema_version": 1,
         "type": "TaskResumeView",
@@ -696,11 +812,17 @@ def resume_task(project_root: str | Path, task_id: str, *, max_chars: int = DEFA
         "question_id": question_id,
         "version_scope": version_scope,
         "judgments": judgments,
+        **({"inherited_judgments": _judgment_summaries(selection.get("inherited", []))}
+           if selection.get("inherited") else {}),
         "judgment_selection": {
             "reason": selection.get("reason"),
             "current_decision_ids": selection.get("current_ids", []),
             "historical_decision_count": len(selection.get("history_ids", [])),
             "historical_decision_ids": selection.get("history_ids", []),
+            **({"inherited_decisions": [{"decision_id": item.get("id"), "revision": item.get("revision"),
+                                         "state": "inherited_pending"}
+                                        for item in selection.get("inherited", [])]}
+               if selection.get("inherited") else {}),
             **({
                 "unresolved_conflict": {
                     "decision_ids": selection.get("conflict_ids", []),
@@ -717,11 +839,44 @@ def resume_task(project_root: str | Path, task_id: str, *, max_chars: int = DEFA
     }
     full_size = _serialized_size(full)
     if full_size <= max_chars:
-        return _apply_budget(full, max_chars, overflow=False)
+        complete = _apply_budget(full, max_chars, overflow=False)
+        if complete["budget"]["used_unicode_chars"] <= max_chars:
+            return complete
     view = _overflow_view(
         full, task_id, question, version_scope, judgments, attempts, gaps,
         actions, citations, commands, selection, max_chars,
     )
+    if _serialized_size(view) > max_chars:
+        # At the 1000-character floor retain the state distinction and exact
+        # revision pointer first; all larger detail remains available through
+        # the command carried in this compact view.
+        inherited_summaries = full.get("inherited_judgments", [])
+        compact_inherited = [{
+            "decision_id": item.get("decision_id"), "revision": item.get("revision"),
+            "state": "inherited_pending", "summary": _preview(item.get("summary", ""), 35),
+            "scope": "historical parent judgment",
+            "gap_count": len(item.get("gaps", [])),
+            "gap_preview": [_preview(gap, 30) for gap in item.get("gaps", [])[:1]],
+        } for item in inherited_summaries[:1]]
+        compact_current = [{key: ( _preview(item.get(key, ""), 100) if key == "summary" else item.get(key))
+                            for key in ("decision_id", "revision", "status", "summary") if item.get(key) is not None}
+                           for item in judgments[:1]]
+        expand = (commands[1:2] if len(commands) > 1 else commands[:1])
+        view = {
+            "schema_version": 1,
+            "type": "TaskResumeView",
+            "task_id": task_id,
+            "state": task.get("state"),
+            "judgments": compact_current,
+            "inherited_judgments": compact_inherited,
+            "judgment_selection": {
+                "reason": selection.get("reason"),
+                "current_decision_ids": selection.get("current_ids", []),
+                **({"unresolved_conflict": {"decision_ids": selection.get("conflict_ids", [])}}
+                   if selection.get("conflict_ids") else {}),
+            },
+            "expansion_commands": expand,
+        }
     view = _apply_budget(view, max_chars, overflow=True)
     if view["budget"]["used_unicode_chars"] > max_chars:
         raise ValueError("compact resume view internal priority fallback exceeded max_chars")
@@ -733,12 +888,17 @@ def show_record(
     record_id: str,
     *,
     section: str | None = None,
+    revision: int | None = None,
 ) -> dict[str, Any]:
     """Return one persisted record or a selected section without side effects."""
     root = Path(project_root).expanduser().resolve()
     store = ResearchStore(root)
-    record = store.latest_record(record_id)
+    if revision is not None and (not isinstance(revision, int) or isinstance(revision, bool) or revision <= 0):
+        raise ValueError("revision must be a positive integer")
+    record = store.latest_record(record_id) if revision is None else _record_revision(store, record_id, revision)
     if record is None:
+        if revision is not None:
+            raise ValueError(f"unknown record revision: {record_id}@{revision}")
         raise ValueError(f"unknown record: {record_id}")
     if section is None:
         payload: Any = record

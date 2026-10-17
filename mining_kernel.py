@@ -272,6 +272,7 @@ def main(argv=None):
     show.add_argument("record_id", nargs="?")
     show.add_argument("--record-id", dest="record_id_option")
     show.add_argument("--section")
+    show.add_argument("--revision", type=int, help="read this exact saved record revision instead of the latest")
     tr = sub.add_parser("task-record-evidence-review"); tr.add_argument("--project-root", required=True); tr.add_argument("task_id"); tr.add_argument("--operation-id", required=True); tr.add_argument("--assessment-json", required=True)
     ju = sub.add_parser("task-record-judgment-update"); ju.add_argument("--project-root", required=True); ju.add_argument("task_id"); ju.add_argument("--operation-id", required=True); ju.add_argument("--update-json", required=True)
     tc = sub.add_parser("task-complete"); tc.add_argument("--project-root", required=True); tc.add_argument("task_id"); tc.add_argument("--operation-id", required=True); tc.add_argument("--completion-json", required=True)
@@ -553,7 +554,7 @@ def main(argv=None):
         record_id = args.record_id_option or args.record_id
         if not record_id:
             raise ValueError("show requires a record id")
-        out = show_record(args.project_root, record_id, section=args.section)
+        out = show_record(args.project_root, record_id, section=args.section, revision=args.revision)
     elif args.command == "task-record-evidence-review":
         from mining_research_kernel.r2_workflow import load_json_value, task_record_evidence_review
         out = task_record_evidence_review(

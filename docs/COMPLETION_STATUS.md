@@ -1,5 +1,32 @@
 # Completion Status and Historical Acceptance
 
+## Compact research continuation — development batch 2026-10-18
+
+This batch builds on merged PR #8, main
+`18549609b000f413ce58f80eea0a9b5b3cfb9981`; its Windows CI passed.
+The existing `resume` and `project-context` entries now distinguish a pending
+continuation from its version-bound inherited judgment. They preserve the
+selected task's current judgment and same-task conflicts, and expose existing
+progress/report operations for compatible source reviews. `show --revision`
+expands an exact saved revision without substituting a later one.
+
+The [two-session synthetic example](../examples/continuing_research/README.md)
+provides small authored paper readings and interpretations through the same
+question, continuation, comparison and report services. It uses the standard
+library, needs no source connection and keeps its generated project outside
+the code repository. Research validity and task selection remain separate
+from demonstration success. This batch does not change source connections or
+add solver execution.
+
+Complete local Windows Python 3.14.2 regression ran 387 tests in 125.910
+seconds: 372 passed, 15 existing link-related cases skipped for sandbox
+permissions, and no failures. All 22 schemas and standard-library synthetic
+discovery/validation passed. An isolated earlier-record copy recovered a
+pending task's exact inherited revision after an independent later revision;
+the original project and copied historical transactions remained unchanged.
+The synthetic example ran through separate processes from different working
+directories, including with an isolated standard-library interpreter.
+
 ## Continuing research — development batch 2026-10-17
 
 The [continuing research workflow](CONTINUING_RESEARCH.md) shares an existing
