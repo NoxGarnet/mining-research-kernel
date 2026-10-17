@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "kind": "zotero_reading_capture",
+  "origin": "synthetic",
+  "instance_id": "0123456789abcdef0123456789abcdef",
+  "library_id": "users/0",
+  "captured_at": "2026-10-17T00:00:00Z",
+  "item": {
+    "key": "PAPER001",
+    "version": 0,
+    "title": "Synthetic support comparison: a workflow example",
+    "item_type": "journalArticle",
+    "doi": null
+  },
+  "collection_key": "COLLECT1",
+  "metadata_status": "read",
+  "pages": [
+    {
+      "attachment_key": "ATTACH01",
+      "attachment_version": 0,
+      "start_page": 1,
+      "end_page": 1,
+      "status": "read",
+      "text_sha256": "489027108477f6274989c66c41cab8ac0952f64eb836c27cea609bed1b4dfdff",
+      "excerpt": "Fabricated example: the compared cases use the same boundary conditions."
+    }
+  ],
+  "diagnostics": []
+}

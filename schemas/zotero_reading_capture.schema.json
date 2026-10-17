@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Zotero External Reader Capture",
+  "type": "object",
+  "required": ["schema_version", "kind", "origin", "instance_id", "library_id", "captured_at", "item", "collection_key", "metadata_status", "pages", "diagnostics"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "zotero_reading_capture"},
+    "origin": {"enum": ["external_mcp", "synthetic"]},
+    "instance_id": {"type": "string", "pattern": "^[a-f0-9]{16,64}$"},
+    "library_id": {"type": "string", "pattern": "^(users|groups)/[0-9]+$"},
+    "captured_at": {"type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|\\+00:00)$"},
+    "item": {
+      "type": "object", "required": ["key", "version", "title", "item_type", "doi"], "additionalProperties": false,
+      "properties": {
+        "key": {"type": "string", "pattern": "^[A-Za-z0-9]{8}$"},
+        "version": {"type": ["integer", "null"], "minimum": 0},
+        "title": {"type": "string"},
+        "item_type": {"type": "string"},
+        "doi": {"type": ["string", "null"], "pattern": "^10\\.[0-9]{4,9}/\\S+$"}
+      }
+    },
+    "collection_key": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9]{8}$"},
+    "metadata_status": {"enum": ["read", "unavailable"]},
+    "pages": {
+      "type": "array", "maxItems": 10,
+      "items": {
+        "type": "object", "required": ["attachment_key", "attachment_version", "start_page", "end_page", "status", "text_sha256", "excerpt"], "additionalProperties": false,
+        "properties": {
+          "attachment_key": {"type": "string", "pattern": "^[A-Za-z0-9]{8}$"},
+          "attachment_version": {"type": ["integer", "null"], "minimum": 0},
+          "start_page": {"type": "integer", "minimum": 1},
+          "end_page": {"type": "integer", "minimum": 1},
+          "status": {"enum": ["read", "unavailable"]},
+          "text_sha256": {"type": ["string", "null"], "pattern": "^[a-f0-9]{64}$"},
+          "excerpt": {"type": "string", "maxLength": 1000}
+        },
+        "allOf": [
+          {"if": {"properties": {"status": {"const": "read"}}, "required": ["status"]}, "then": {"properties": {"text_sha256": {"type": "string"}, "excerpt": {"minLength": 1}}}},
+          {"if": {"properties": {"status": {"const": "unavailable"}}, "required": ["status"]}, "then": {"properties": {"text_sha256": {"type": "null"}, "excerpt": {"maxLength": 0}}}}
+        ]
+      }
+    },
+    "diagnostics": {"type": "array", "items": {"type": "object", "required": ["code", "message"], "additionalProperties": false, "properties": {"code": {"type": "string", "minLength": 1}, "message": {"type": "string", "minLength": 1}}}}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"metadata_status": {"const": "read"}}, "required": ["metadata_status"]},
+      "then": {"properties": {"item": {"properties": {"title": {"minLength": 1}}}}}
+    },
+    {
+      "if": {"properties": {"metadata_status": {"const": "unavailable"}}, "required": ["metadata_status"]},
+      "then": {"properties": {"pages": {"items": {"properties": {"status": {"const": "unavailable"}}}}}}
+    }
+  ]
+}

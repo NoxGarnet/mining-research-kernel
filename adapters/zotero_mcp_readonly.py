@@ -7,6 +7,7 @@ degrades to CANNOT_VERIFY.  No write operation is represented by this module.
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any, Callable
 
 
@@ -16,6 +17,8 @@ READ_OPERATIONS = frozenset({
     "zotero_get_item_metadata",
     "zotero_get_item_children",
     "zotero_get_item_fulltext",
+    "zotero_search_items",
+    "zotero_read_pdf_pages",
 })
 
 
@@ -29,6 +32,41 @@ class ItemReadError(RuntimeError):
 
 def _diagnostic(code: str, message: str) -> dict[str, str]:
     return {"code": code, "message": message}
+
+
+def _mcp_error(result: Any) -> bool:
+    """Recognize explicit MCP errors without scanning returned article text."""
+    if isinstance(result, str):
+        if re.search(r"(?m)^# PDF Pages \d+-\d+ of PDF\s*$", result):
+            return False
+        text = re.sub(r"^# Zotero Collections\s*\r?\n\s*", "", result, count=1)
+        return bool(re.match(r"^\s*(?:Error(?: fetching [^\r\n:]+)?|Exception|Failed)\s*:", text, re.I))
+    if not isinstance(result, dict):
+        return False
+    if result.get("isError") is True:
+        return True
+    structured = result.get("structuredContent")
+    if isinstance(structured, dict) and _mcp_error(structured):
+        return True
+    if "result" in result and _mcp_error(result["result"]):
+        return True
+    content = result.get("content")
+    if not isinstance(content, list):
+        return False
+    for part in content:
+        if not isinstance(part, dict) or part.get("type") != "text":
+            continue
+        text = part.get("text")
+        if not isinstance(text, str):
+            continue
+        # A PDF payload has an explicit page envelope; text inside it is article
+        # content and must never be interpreted as an MCP transport error.
+        if re.search(r"(?m)^# PDF Pages \d+-\d+ of PDF\s*$", text):
+            continue
+        text = re.sub(r"^# Zotero Collections\s*\r?\n\s*", "", text, count=1)
+        if re.match(r"^\s*(?:Error(?: fetching [^\r\n:]+)?|Exception|Failed)\s*:", text, re.I):
+            return True
+    return False
 
 
 def _base(action: str, status: str, diagnostics: list[dict[str, str]]) -> dict[str, Any]:
@@ -73,6 +111,10 @@ def dispatch(
 
     try:
         result = reader(operation, dict(params or {}))
+        if _mcp_error(result):
+            return _base("inspect", "CANNOT_VERIFY", [
+                _diagnostic("source_read_failed", "external Zotero MCP returned an error response"),
+            ])
     except ConnectionError as exc:
         return _base("inspect", "CANNOT_VERIFY", [
             _diagnostic("zotero_closed", str(exc) or "Zotero source is unavailable"),

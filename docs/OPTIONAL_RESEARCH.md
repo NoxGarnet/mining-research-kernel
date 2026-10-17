@@ -1,5 +1,8 @@
 # Opt in to research records and a documentation source
 
+For literature, the [Zotero reading workflow](ZOTERO_READING.md) uses the same
+optional records for selected metadata/pages, interpretations, and recovery.
+
 Ordinary Markdown navigation remains usable on its own. When a task needs
 durable questions, evidence, decisions, and recovery, an existing project can
 opt in to the same ResearchStore used by configured Kernel projects. This does

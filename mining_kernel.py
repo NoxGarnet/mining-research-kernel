@@ -94,6 +94,15 @@ def main(argv=None):
     dr.add_argument("--product-version", required=True)
     dr.add_argument("--anchor")
     dr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    zr = sub.add_parser("zotero-record", help="persist a bounded external Zotero reading capture; does not query Zotero")
+    zr.add_argument("--project-root", required=True)
+    zr.add_argument("--task-id", required=True)
+    zr.add_argument("--question", required=True)
+    zr.add_argument("--capture", required=True, help="explicit UTF-8 JSON capture file from the external reader")
+    zr.add_argument("--findings-json", default="[]", help="optional interpretations and page citations; JSON or @file")
+    zr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    zc = sub.add_parser("validate-zotero-reading", help="validate one external reading capture without writing records")
+    zc.add_argument("capture")
     init = sub.add_parser("init-flac3d-project")
     init.add_argument("path")
     init.add_argument("--project-id", required=True)
@@ -153,6 +162,45 @@ def main(argv=None):
     if args.command == "enable-research":
         from research_project import enable_research
         out = enable_research(args.project_root, args.project_id)
+    elif args.command in {"zotero-record", "validate-zotero-reading"}:
+        from mining_research_kernel.zotero_reading import validate_capture
+        capture_path = Path(args.capture).expanduser()
+        with capture_path.open("rb") as stream:
+            capture_bytes = stream.read(256 * 1024 + 1)
+        if len(capture_bytes) > 256 * 1024:
+            raise ValueError("Zotero reading capture exceeds 256 KiB")
+        capture = validate_capture(json.loads(capture_bytes.decode("utf-8-sig")))
+        if args.command == "validate-zotero-reading":
+            out = {"valid": True, "item_key": capture["item"]["key"],
+                   "metadata_status": capture["metadata_status"],
+                   "page_ranges": len(capture["pages"]), "source_revalidated": False}
+        else:
+            from mining_research_kernel.zotero_records import record_zotero_reading
+            from mining_research_kernel.r2_workflow import load_json_value
+            result = record_zotero_reading(
+                args.project_root, task_id=args.task_id, question=args.question,
+                capture=capture, findings=load_json_value(args.findings_json, "findings-json"),
+                task_context=args.task_context,
+            )
+            packet = result["task_packet"]
+            out = {"type": "ZoteroReadingRecordReceipt", "task_id": result["task_id"],
+                   "decision_id": result["decision_id"], "asset_refs": packet["asset_refs"],
+                   "evidence_refs": packet["evidence_refs"], "replayed": result["replayed"],
+                   "query_performed": False, "source_revalidated": False,
+                   "capture_origin": capture["origin"], "captured_at": capture["captured_at"],
+                   "source": {"instance_id": capture["instance_id"], "library_id": capture["library_id"],
+                              "item_key": capture["item"]["key"], "item_version": capture["item"]["version"]},
+                   "metadata_status": capture["metadata_status"],
+                   "reading_status": result["capture_summary"]["reading_status"],
+                   "page_ranges_read": [{"attachment_key": p["attachment_key"],
+                                         "start_page": p["start_page"], "end_page": p["end_page"]}
+                                        for p in capture["pages"] if p["status"] == "read"],
+                   "task_state": packet["state"], "completion_scope": packet["completion_scope"],
+                   "research_judgment_status": packet["research_judgment_status"],
+                   "run_created": False, "verification_created": False}
+            if packet["research_judgment_status"] == "INSUFFICIENT":
+                print(json.dumps(out, ensure_ascii=False, indent=2))
+                return 2
     elif args.command == "documentation-record":
         from mining_research_kernel.documentation_records import record_documentation_query
         out = record_documentation_query(
