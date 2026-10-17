@@ -10,6 +10,10 @@ For a simple project handoff, ordinary Markdown is sufficient. This workflow
 uses [optional research records](OPTIONAL_RESEARCH.md) when a comparison needs
 durable, recoverable evidence.
 
+For subsequent reading and judgment updates on the same question, use
+[continuing research](CONTINUING_RESEARCH.md). It preserves the prior step and
+can generate a readable report from the saved comparison.
+
 ## Select the reading scope
 
 Read selected PDF pages with [Zotero reading](RESEARCH_SOURCES.md). Start with

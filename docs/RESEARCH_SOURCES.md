@@ -6,6 +6,10 @@ organizes the work; the user chooses the question, deliverable, scope, and
 finish or handoff criteria. Recover settled choices from the conversation and
 project entry, and ask only about consequential missing information.
 
+To supplement readings and update the same question over several steps, use
+[continuing research](CONTINUING_RESEARCH.md), including progress recovery and
+a derived Markdown report.
+
 For official paragraphs and optional Itasca MCP documentation discovery, use
 [documentation reading](ITASCA_READING.md). For two or more distinct papers
 with page-bounded comparison cells, use [literature comparison](LITERATURE_COMPARISON.md).
