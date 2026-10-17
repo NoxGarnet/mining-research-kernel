@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit Zotero stdio Host registration",
+  "type": "object",
+  "required": ["schema_version", "kind", "instance_id", "library_id", "command", "args"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "zotero_stdio"},
+    "instance_id": {"type": "string", "pattern": "^[a-f0-9]{16,64}$"},
+    "library_id": {"type": "string", "pattern": "^(users|groups)/[0-9]+$"},
+    "command": {"type": "string", "minLength": 1, "format": "absolute-path"},
+    "args": {"type": "array", "items": {"type": "string"}},
+    "cwd": {"type": "string", "format": "absolute-path"},
+    "timeout_seconds": {"type": "integer", "minimum": 1, "maximum": 60, "default": 30}
+  }
+}

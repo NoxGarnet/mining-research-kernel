@@ -10,6 +10,7 @@ import hashlib
 import copy
 import os
 import re
+import time
 from contextlib import nullcontext
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -463,10 +464,20 @@ class _Writer:
         _check_record_path(self.lock_path)
         _check_record_path(self.lock_path.parent / "records")
         self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError as exc:
-            raise WriterLockedError(f"project writer lock is held: {self.lock_path}") from exc
+        for attempt in range(6):
+            try:
+                fd = os.open(str(self.lock_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                break
+            except FileExistsError as exc:
+                raise WriterLockedError(f"project writer lock is held: {self.lock_path}") from exc
+            except PermissionError as exc:
+                # Windows can report access denied while another handle finishes
+                # deleting the lock. Never remove or replace another writer's lock.
+                if getattr(exc, "winerror", None) != 5 or attempt == 5:
+                    raise
+                if self.lock_path.exists():
+                    raise WriterLockedError(f"project writer lock is held: {self.lock_path}") from exc
+                time.sleep(0.01)
         try:
             with os.fdopen(fd, "wb") as stream:
                 stream.write(self._owner_bytes)
