@@ -103,6 +103,34 @@ def main(argv=None):
     zr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
     zc = sub.add_parser("validate-zotero-reading", help="validate one external reading capture without writing records")
     zc.add_argument("capture")
+    zs = sub.add_parser("zotero-search", help="search an explicitly configured read-only Zotero connection")
+    zs.add_argument("--registration", required=True)
+    zs.add_argument("--query", required=True)
+    zs.add_argument("--collection-key")
+    zs.add_argument("--limit", type=int, default=10)
+    zd = sub.add_parser("zotero-read", help="read selected Zotero pages and save their observation without a capture file")
+    zd.add_argument("--registration", required=True)
+    zd.add_argument("--project-root", required=True)
+    zd.add_argument("--task-id", required=True)
+    zd.add_argument("--question", required=True)
+    zd.add_argument("--item-key", required=True)
+    zd.add_argument("--pdf-key", dest="attachment_key")
+    zd.add_argument("--pages", help="one-based PDF page indices, e.g. 1,3-4; omit for metadata only")
+    zd.add_argument("--collection-key")
+    zd.add_argument("--max-reading-chars", type=int, default=12000)
+    zd.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    sr = sub.add_parser("research-start", help="combine selected saved literature and documentation observations")
+    sr.add_argument("--project-root", required=True)
+    sr.add_argument("--task-id", required=True)
+    sr.add_argument("--question", required=True)
+    sr.add_argument("--asset-ref", action="append", required=True)
+    sr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    rv = sub.add_parser("research-review", help="record a cited Markdown review of selected saved sources")
+    rv.add_argument("--project-root", required=True)
+    rv.add_argument("--task-id", required=True)
+    rv.add_argument("--operation-id", required=True)
+    rv.add_argument("--review-file", required=True)
+    rv.add_argument("--judgment", choices=("PROVISIONAL_WITH_GAPS", "INSUFFICIENT"), default="PROVISIONAL_WITH_GAPS")
     init = sub.add_parser("init-flac3d-project")
     init.add_argument("path")
     init.add_argument("--project-id", required=True)
@@ -162,6 +190,69 @@ def main(argv=None):
     if args.command == "enable-research":
         from research_project import enable_research
         out = enable_research(args.project_root, args.project_id)
+    elif args.command == "zotero-search":
+        from mining_research_kernel.zotero_workflow import search_zotero
+        out = search_zotero(args.registration, query=args.query,
+                            collection_key=args.collection_key, limit=args.limit)
+        if out.get("status") != "PASS":
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 2
+    elif args.command == "zotero-read":
+        from mining_research_kernel.zotero_workflow import read_zotero
+        result = read_zotero(
+            args.project_root, registration=args.registration, task_id=args.task_id,
+            question=args.question, item_key=args.item_key, attachment_key=args.attachment_key,
+            pages=args.pages, collection_key=args.collection_key, task_context=args.task_context,
+            max_reading_chars=args.max_reading_chars,
+        )
+        if "task_packet" not in result:
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 2
+        packet = result["task_packet"]
+        out = {"type": "ZoteroReadReceipt", "task_id": result["task_id"],
+               "status": result.get("status"), "diagnostics": result.get("diagnostics", []),
+               "decision_id": result["decision_id"], "asset_refs": packet["asset_refs"],
+               "evidence_refs": packet["evidence_refs"], "replayed": result["replayed"],
+               "query_performed": result.get("query_performed", False),
+               "source_read_attempted": result.get("source_read_attempted", False),
+               "source_read_performed": result.get("source_read_performed", False),
+               "originaltext_not_reread": result.get("originaltext_not_reread", False),
+               "capture_summary": result["capture_summary"],
+               "completion_scope": packet.get("completion_scope"),
+               "research_judgment_status": packet["research_judgment_status"],
+               "reading_texts": result.get("reading_texts", []),
+               "run_created": False, "verification_created": False}
+        if result.get("status") != "PASS" or packet["research_judgment_status"] == "INSUFFICIENT":
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 2
+    elif args.command == "research-start":
+        from mining_research_kernel.source_review import start_source_review
+        result = start_source_review(args.project_root, task_id=args.task_id,
+                                     question=args.question, asset_refs=args.asset_ref,
+                                     task_context=args.task_context)
+        packet = result["task_packet"]
+        out = {"type": "SourceResearchStart", "task_id": packet["task_id"],
+               "state": packet["state"], "asset_refs": packet["asset_refs"],
+               "evidence_refs": packet["evidence_refs"], "sources": result["sources"],
+               "review_template": result["review_template"], "replayed": result["replayed"],
+               "source_queries_performed": False}
+    elif args.command == "research-review":
+        from mining_research_kernel.source_review import record_source_review
+        with Path(args.review_file).expanduser().open("rb") as stream:
+            note_bytes = stream.read(65537)
+        if len(note_bytes) > 65536:
+            raise ValueError("research review exceeds 64 KiB")
+        result = record_source_review(
+            args.project_root, task_id=args.task_id, operation_id=args.operation_id,
+            note=note_bytes.decode("utf-8-sig"), judgment_status=args.judgment,
+        )
+        packet = result["task_packet"]
+        out = {"type": "SourceResearchReviewReceipt", "task_id": packet["task_id"],
+               "state": packet["state"], "decision_id": packet["review_record_ref"],
+               "completion_scope": packet.get("completion_scope"),
+               "asset_refs": packet["asset_refs"], "evidence_refs": packet["evidence_refs"],
+               "research_judgment_status": packet["research_judgment_status"],
+               "source_queries_performed": False, "run_created": False, "verification_created": False}
     elif args.command in {"zotero-record", "validate-zotero-reading"}:
         from mining_research_kernel.zotero_reading import validate_capture
         capture_path = Path(args.capture).expanduser()

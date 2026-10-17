@@ -180,7 +180,7 @@ verification.
 |---|---|
 | Real kernel mechanisms | ResearchStore, TaskState, routes, Run Ledger, Evidence/Verification, Research Map, Cognition views and completion checks. |
 | Synthetic | Fixture projects, deterministic fake execution and synthetic static checking. |
-| User-provided resources | Version-matched Itasca local documentation and registration; sanitized Zotero snapshots or a caller-injected read-only Zotero reader. |
+| User-provided resources | Version-matched Itasca local documentation and registration; sanitized Zotero snapshots, a caller-injected read-only reader, or an existing Zotero stdio runtime selected through an explicit Host registration. |
 | Unimplemented | Production FLAC3D `static_check`, real FLAC3D execution and complete `itasca-mcp` integration. |
 
 The [public acceptance summary](docs/ACCEPTANCE_SUMMARY.md) records the
@@ -366,6 +366,12 @@ zotero_get_item_fulltext
 zotero_search_items
 zotero_read_pdf_pages
 ```
+
+The [research source workflow](docs/RESEARCH_SOURCES.md) provides direct
+`zotero-search` / `zotero-read` commands for an explicit Host stdio connection,
+then `research-start` / `research-review` to compare selected literature and
+documentation observations using a cited Markdown note. It reuses existing
+research records and keeps source coverage separate from research conclusions.
 
 The [Zotero reading workflow](docs/ZOTERO_READING.md) adds bounded external
 metadata/page captures and explicit writeback into optional research records.

@@ -1,5 +1,10 @@
 # Read selected Zotero literature and keep research continuity
 
+For direct CLI reads through an existing Host connection, followed by a
+literature/documentation review without per-reading capture JSON, start with
+the [research source workflow](RESEARCH_SOURCES.md). The capture/import APIs
+below remain useful for external readers and offline observations.
+
 Choose the research question and useful collection or items with the user.
 Existing Markdown projects can keep their layout. Enable
 [optional research records](OPTIONAL_RESEARCH.md) when durable reading and

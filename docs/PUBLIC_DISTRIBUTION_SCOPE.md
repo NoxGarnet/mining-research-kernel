@@ -14,6 +14,8 @@ Included:
 - the read-only Zotero snapshot adapter and its sanitized fixture contract.
 - bounded Zotero reading capture validation, caller-injected read collection,
   and explicit capture writeback, with authored synthetic examples only;
+- an explicit Host-selected read-only Zotero stdio client and a cited Markdown
+  review that combines saved literature and documentation observations;
 - the sanitized acceptance summary for the explicitly identified code
   baseline.
 

@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from flac3d_project import init_project
 from mining_research_kernel.records import ResearchStore, ResearchStoreError, WriterLockedError
@@ -90,6 +91,35 @@ class R2RecordStoreTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             with self.store.writer("writer-three"):
                 raise RuntimeError("test exception")
+        self.assertFalse(self.store.lock_path.exists())
+
+    def test_windows_lock_delete_race_retries_without_masking_permanent_denial(self):
+        denied = PermissionError(13, "access denied")
+        denied.winerror = 5
+        original_open = os.open
+        attempts = []
+        def opening(*args, **kwargs):
+            attempts.append(args)
+            if len(attempts) == 1:
+                raise denied
+            return original_open(*args, **kwargs)
+        with patch("mining_research_kernel.records.os.open", side_effect=opening):
+            with self.store.writer("retry-delete-race"):
+                self.assertTrue(self.store.lock_path.exists())
+        self.assertEqual(2, len(attempts))
+        with self.store.writer("existing-writer"):
+            original_lock = self.store.lock_path.read_bytes()
+            with patch("mining_research_kernel.records.os.open", side_effect=denied):
+                with self.assertRaises(WriterLockedError):
+                    with self.store.writer("contender"):
+                        self.fail("must not acquire another writer's lock")
+            self.assertEqual(original_lock, self.store.lock_path.read_bytes())
+        with patch("mining_research_kernel.records.os.open", side_effect=denied) as blocked:
+            with patch("mining_research_kernel.records.time.sleep"):
+                with self.assertRaises(PermissionError):
+                    with self.store.writer("permanent-denial"):
+                        pass
+            self.assertEqual(6, blocked.call_count)
         self.assertFalse(self.store.lock_path.exists())
 
     def test_malformed_ids_and_traversal_are_rejected(self):
