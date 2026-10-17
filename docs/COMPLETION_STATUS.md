@@ -1,5 +1,31 @@
 # Completion Status and Historical Acceptance
 
+## Current source workflows — 2026-10-17
+
+The lightweight workspace now supports optional durable research records,
+direct bounded Zotero reading and cited source synthesis. These changes through
+PR #6 are merged in main at `bc6541fd93ec316eb3f08014fb4dee10e5463275`;
+its Windows CI passed. They have not been tagged as a new release.
+
+The subsequent development batch adds [documentation passage reading](ITASCA_READING.md)
+and [question-oriented literature comparison](LITERATURE_COMPARISON.md).
+Itasca MCP documentation output remains a community-derived source, separately
+identified from registered official local HTML. Research interpretation stays
+provisional or insufficient; these paths create no solver Run or engineering
+Verification. The guides document current contracts and limits. Acceptance
+tables below describe their named historical baselines, rather than the test
+count or full capability set of the current checkout.
+
+Local validation of the subsequent batch used Windows Python 3.14.2: 359 tests
+ran, 357 passed and two file-symlink cases were skipped for local permissions;
+there were no failures. All 22 schemas and standard-library discovery/validation
+checks passed. Bounded live reads exercised an existing Zotero connection,
+registered official HTML and an existing Itasca documentation runtime. A
+three-source comparison recovered its saved insufficient judgment in a separate
+process, and a task from the merged PR #6 baseline replayed without new source
+queries or transactions. Private source material and Host profiles are excluded
+from the repository. These are reading/recovery checks, not model validation.
+
 ## Local integration candidate — 2026-10-15
 
 The local integration candidate is based on `be72204d9ed51b627546f3a1d1ffe0429b4fb432`

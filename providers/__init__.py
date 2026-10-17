@@ -5,6 +5,7 @@ from .documentation import (
     VERIFIED,
     DocumentationProvider,
     resolve_documentation,
+    read_local_documentation,
     verify_syntax,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "VERIFIED",
     "DocumentationProvider",
     "resolve_documentation",
+    "read_local_documentation",
     "verify_syntax",
 ]
