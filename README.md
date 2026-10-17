@@ -21,6 +21,12 @@ Give your Agent the question and material locations, for example:
 The Agent can follow the relevant guide and enable the needed records or source
 connection within the agreed task. The same small workspace remains the entry.
 
+To try continued reading without a library connection or an existing model, use
+the [two-session synthetic research example](examples/continuing_research/README.md).
+It preserves the first judgment, adds a selected reading under the same question,
+and demonstrates recovery and a generated report. Its paper passages and
+interpretations are authored teaching material.
+
 Example (PowerShell):
 
 ```powershell
@@ -119,6 +125,9 @@ an independent review.
 - Continued source review under one ResearchQuestion, retaining prior task and
   judgment revisions, with read-only progress and regenerable Markdown reports;
   see the [continuing research guide](docs/CONTINUING_RESEARCH.md).
+- Compact recovery distinguishes a pending continuation from its inherited
+  historical judgment. Exact saved revisions remain expandable, and compatible
+  source-review tasks expose progress and report entry points.
 - Direct bounded Zotero search/page reading, cited source synthesis, and recovery;
   see the [research source workflow](docs/RESEARCH_SOURCES.md).
 - Bounded official local HTML passage reading and documentation-only Itasca MCP

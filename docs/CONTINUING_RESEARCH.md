@@ -10,6 +10,10 @@ does not need to prepare CLI commands or comparison JSON. Ordinary Markdown
 projects can continue using their existing entry; enable persistent records
 only when they help the task.
 
+For an offline first try, use the [two-session synthetic example](../examples/continuing_research/README.md).
+It supplies small authored paper passages and demonstrates the complete loop
+without installing a source connection or preparing comparison JSON.
+
 ## Agent workflow
 
 1. Recover the question, selected task and latest recorded judgment. Use the
@@ -71,6 +75,19 @@ inputs under the same task ID is a conflict. The review itself remains an
 explicit operation with a project-unique operation ID.
 
 ## Recover progress and generate a report
+
+When starting a new conversation, give the Agent the project path and named task.
+It can begin with `project-context` and `resume`, then follow the returned argv
+to expand the selected question's progress or render its report. A pending
+continuation has no new current judgment: its inherited Decision remains clearly
+labelled historical context, with the exact revision bound when it was created.
+Later independent revisions of that Decision do not replace this context.
+Source-reading observations and sibling research steps do not become conflicting
+current judgments just because the new task cites their records.
+
+The Agent should expand the inherited scope and gaps before proposing a next
+action. A suggested reading is not an agreed task, and a completed source review
+does not establish that the overall research project is finished.
 
 ```powershell
 python -B -X utf8 mining_kernel.py research-progress --project-root $projectRoot --task-id ae-step-02

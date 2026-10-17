@@ -80,6 +80,14 @@ the tool does not synthesize a new project goal. Same-task competing judgments
 remain explicitly conflicting. The `record_sequence` identifies the inspected
 transaction snapshot, not a proof that source materials are still current.
 
+For [continued source research](CONTINUING_RESEARCH.md), a pending task shows
+zero current Decisions and a separate inherited preview pinned to its saved
+revision. A later revision of the parent's Decision does not replace that
+preview. Compatible source-review tasks also expose exact progress and report
+argv so the Agent can recover the named branch without inventing a new task.
+The selected task's own completed judgment and any unresolved same-task branch
+remain distinct from inherited history.
+
 The default page contains at most eight entries, with totals and `next_argv` for
 remaining entries. Whole rows are moved to subsequent pages to target 4000
 serialized Unicode characters. Use `--offset` and `--limit` (1–20), or execute the returned
