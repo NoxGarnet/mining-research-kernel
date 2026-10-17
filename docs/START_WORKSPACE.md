@@ -76,8 +76,9 @@ when needed; rerunning `init-workspace` is not an update or migration command.
 Ordinary reading with no substantive change does not require a research record
 or writeback. Existing user authorization continues within its stated scope.
 Add further projects or knowledge links only when they exist. The index is
-navigation; keep project status and evidence in the project. Existing FLAC3D
-kernel configuration and the generic record system remain optional later
-steps, with compatibility to be addressed before generic records are enabled.
+navigation; keep project status and evidence in the project. If persistent
+questions and judgments are needed, [enable research records explicitly](OPTIONAL_RESEARCH.md).
+Ordinary Markdown use does not require this step; existing FLAC3D kernel
+configuration remains supported without migration.
 The synthetic workflow demonstrates kernel mechanics only; it is not PFC, AE,
 or a real FLAC3D solve.

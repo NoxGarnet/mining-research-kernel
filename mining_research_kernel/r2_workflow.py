@@ -14,7 +14,7 @@ import re
 from pathlib import Path
 from typing import Any, Mapping
 
-from flac3d_project import load_config
+from research_project import load_config
 from mining_research_kernel.cognition import CoreCognition
 from mining_research_kernel.records import ResearchStore, ResearchStoreError
 from mining_research_kernel.task_engine import (
@@ -177,11 +177,12 @@ def _relationship(relationship_id: str, relation: str, from_record: Mapping[str,
 
 
 def _load_project(project_root: str | os.PathLike[str]) -> tuple[Path, dict[str, Any], dict[str, Any]]:
-    root = Path(project_root).expanduser().resolve()
-    config = load_config(root)
-    if config.get("product") == "synthetic":
-        # The second-domain fixture has no concrete adapter. Its workflow
-        # builder consumes this generic project contract directly.
+    selected_root = Path(project_root).expanduser()
+    config = load_config(selected_root)
+    root = selected_root.resolve()
+    if config.get("product") in {"synthetic", "research"}:
+        # Neutral research projects and the second-domain fixture do not need
+        # a concrete model adapter; their workflows consume this contract.
         project = copy.deepcopy(config)
     else:
         from adapters.flac3d import discover
@@ -212,6 +213,9 @@ def _request_for_engine(request: Mapping[str, Any], task_id: str, route_id: str)
 
 def _workflow_builder(request: Mapping[str, Any]):
     value = request.get("workflow_id", request.get("workflow"))
+    if value in {"research", "mining_research_kernel.workflow.research"}:
+        from workflows.research import build_research_workflow_pack
+        return build_research_workflow_pack
     if value in {"synthetic", "mining_research_kernel.workflow.synthetic"}:
         from workflows.synthetic import build_synthetic_workflow_pack
         return build_synthetic_workflow_pack
@@ -282,6 +286,15 @@ def _material_location_map(value: Any) -> dict[str, dict[str, str]]:
     return result
 
 
+def _embedded_material_hash(asset: Mapping[str, Any]) -> str:
+    """Hash a recorded observation, without opening its original source."""
+    locator = asset.get("locator", {})
+    if (locator.get("record_id") != asset.get("id") or locator.get("field") != "payload"
+            or not isinstance(asset.get("payload"), Mapping)):
+        raise ValueError(f"asset has invalid embedded payload locator: {asset.get('id')}")
+    return _sha256_json(asset["payload"])
+
+
 def _material_linkage(root: Path, request: Mapping[str, Any]) -> dict[str, Any]:
     """Resolve explicit Asset/Evidence references without claiming substantive reading."""
     asset_refs = _material_ref_list(request.get("asset_refs"), "asset_refs")
@@ -330,7 +343,19 @@ def _material_linkage(root: Path, request: Mapping[str, Any]) -> dict[str, Any]:
         path_kind = locator.get("path_kind")
         locator_status = "caller_label"
         content_status = "not_reloaded"
-        if path_kind == "project_relative":
+        if path_kind == "record_embedded":
+            locator_status = "embedded_record_payload"
+            if _embedded_material_hash(asset) == asset.get("content_sha256"):
+                content_status = "recorded_snapshot_hash_match"
+            else:
+                content_status = "hash_mismatch"
+                blocking_reasons.append("material_content_changed")
+            material_gaps.append({
+                "asset_id": asset_id,
+                "reason": "recorded_snapshot_original_not_revalidated",
+                "next_action": "use the snapshot within its historical scope; a fresh source query is a separate action",
+            })
+        elif path_kind == "project_relative":
             try:
                 source_path = _project_path(root, locator["path"], f"asset_refs.{asset_id}.locator.path")
             except ValueError as exc:
@@ -519,10 +544,16 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     if not isinstance(request_value, Mapping):
         raise ValueError("request-json must contain a JSON object")
     request_value = copy.deepcopy(dict(request_value))
+    if config.get("product") == "research":
+        if "workflow_id" not in request_value and "workflow" not in request_value:
+            request_value["workflow_id"] = "mining_research_kernel.workflow.research"
+        request_value.setdefault("task_type", "mining_research_kernel.task.evidence_review")
     if request_value.get("workflow_id") == "synthetic":
         request_value["workflow_id"] = "mining_research_kernel.workflow.synthetic"
     elif request_value.get("workflow_id") == "flac3d":
         request_value["workflow_id"] = "mining_research_kernel.workflow.flac3d"
+    elif request_value.get("workflow_id") == "research":
+        request_value["workflow_id"] = "mining_research_kernel.workflow.research"
     task_id = _id(request_value.get("task_id", "task-1"), "task_id")
     ids = _task_ids(task_id)
     question_statement = _require_string(request_value.get("question_statement"), "question_statement")
@@ -608,7 +639,8 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
 
 def _method_for(task_type: str, workflow_id: str = "mining_research_kernel.workflow.flac3d") -> str:
     kind = task_type.rsplit(".", 1)[-1].casefold()
-    family = "synthetic" if workflow_id.endswith(".synthetic") else "flac3d"
+    family = ("research" if workflow_id.endswith(".research") else
+              "synthetic" if workflow_id.endswith(".synthetic") else "flac3d")
     return {
         "fake_execution": f"mining_research_kernel.method.{family}.fake_execution",
         "execution": f"mining_research_kernel.method.{family}.fake_execution",
@@ -913,8 +945,11 @@ def _validate_incremental_materials(
                 raise ValueError(
                     f"{field}.source changed; register a new material revision before inheriting"
                 )
+        elif path_kind == "record_embedded":
+            if _embedded_material_hash(asset) != asset.get("content_sha256"):
+                raise ValueError(f"{field}.embedded snapshot hash does not match its Asset")
         elif path_kind != "caller_label":
-            raise ValueError(f"{field}.locator.path_kind must be project_relative or caller_label")
+            raise ValueError(f"{field}.locator.path_kind must be project_relative, caller_label or record_embedded")
 
         evidence_revisions: dict[str, int] = {}
         evidence_refs = material.get("evidence_refs", [])

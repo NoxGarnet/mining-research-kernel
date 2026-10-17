@@ -26,3 +26,7 @@ python -B -X utf8 mining_kernel.py project-context --project-root examples/flac3
 It reads the project's `START.md` and `README.md` as navigation entries and
 lists their explicitly linked report and input paths. It does not open or
 verify the linked source files; follow the report links to read the evidence.
+
+To use a separate working project for persistent query observations, follow
+the [optional research guide](../../docs/OPTIONAL_RESEARCH.md). This teaching
+directory itself remains an unconfigured, file-only example.

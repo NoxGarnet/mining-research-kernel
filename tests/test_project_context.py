@@ -113,6 +113,29 @@ class ProjectContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"materials\[0\].path"):
             project_context(self.root, manifest="list.json")
 
+    def test_configured_nested_entry_resolves_links_without_opening_sources(self):
+        from research_project import enable_research
+        enable_research(self.root, "nested-entry")
+        (self.root / "research_project.json").write_text(json.dumps({
+            "schema_version": 1, "project_id": "nested-entry", "entry": "notes/ENTRY.md"
+        }), encoding="utf-8")
+        (self.root / "notes").mkdir()
+        (self.root / "notes/ENTRY.md").write_text(
+            "[Material](source.txt)\n`other.txt`\n", encoding="utf-8")
+        original = Path.open
+        def guarded(path, *args, **kwargs):
+            if path.suffix == ".txt":
+                raise AssertionError("source opened")
+            return original(path, *args, **kwargs)
+        before = self.snapshot()
+        with patch.object(Path, "open", guarded):
+            result = project_context(self.root)
+        self.assertEqual(1, result["counts"]["entries"])
+        materials = [i for i in result["items"] if i["kind"] == "material"]
+        self.assertEqual({str((self.root / "notes/source.txt").resolve()), str((self.root / "notes/other.txt").resolve())},
+                         {i["location"]["path"] for i in materials})
+        self.assertEqual(before, self.snapshot())
+
     def test_inline_paths_have_entry_lines_without_reading_sources(self):
         text = ("# Project\n```text\n`ignored.md`\n```\n"
                 "- `docs/decisions.md`\n- `conclusion.md`\n"

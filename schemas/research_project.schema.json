@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Optional Neutral Research Project Config",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project_id"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "project_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "entry": {"$ref": "#/$defs/relativePath", "default": "START.md"},
+    "research_map": {"$ref": "#/$defs/relativePath", "default": "research/map.json"},
+    "route_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"max_active_routes": {"type": "integer", "minimum": 1, "maximum": 3}}
+    }
+  },
+  "$defs": {
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!\\.{1,2}(?:/|$))[^\\u0000:/\\\\]+(?:/(?!\\.{1,2}(?:/|$))[^\\u0000:/\\\\]+)*$"
+    }
+  }
+}

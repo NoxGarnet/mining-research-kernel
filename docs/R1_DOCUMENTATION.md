@@ -4,6 +4,10 @@ R1 provides a bounded command-name check against an explicitly registered local
 HTML source. It does not run FLAC3D, fetch web pages or validate a complete
 script. See COMPLETION_STATUS.md for the current acceptance result.
 
+To save an actual provider observation with its research question, evidence,
+and limits, use [optional research records](OPTIONAL_RESEARCH.md). The existing
+`documentation-check` operation below remains read-only.
+
 ## What the check establishes
 
 The reader must open the registered HTML page, verify its pinned digest, read
