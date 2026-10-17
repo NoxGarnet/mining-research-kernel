@@ -10,6 +10,7 @@ offline examples use the Python standard library.
 - [Start a lightweight workspace](docs/START_WORKSPACE.md): create the three-file entry and continue from a real research question.
 - [Bring an existing project](docs/EXISTING_PROJECT.md): keep its files in place, add only a missing entry, and hand off a bounded task.
 - [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
+- [Optionally keep research records](docs/OPTIONAL_RESEARCH.md): enable an existing project, record a local documentation query, and recover its evidence and limits.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
 
 Example (PowerShell):
@@ -145,6 +146,11 @@ an independent review.
   and keeps reading and verification statuses separate from registration.
 - A read-only compact `resume` view and targeted `show` expansion for persisted
   research state; the complete `task-inspect` TaskPacket remains available.
+- Opt-in neutral project configuration for the same ResearchStore and a
+  read-only evidence-review workflow, preserving existing files and legacy projects.
+- An explicit `documentation-record` operation that queries the registered
+  local HTML provider and atomically links a bounded observation to a question,
+  derived snapshot, evidence and provisional Decision; it creates no solver Run.
 - A bounded incremental judgment update that inherits existing material reads,
   checks Decision revisions and Evidence references, and preserves prior
   Decisions without creating execution or Verification records.

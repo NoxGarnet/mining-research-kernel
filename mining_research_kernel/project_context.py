@@ -130,12 +130,13 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                               "basis": f"explicit manifest {manifest}",
                               "location": _location(root, item["path"])})
 
-    config = safe_path(root, "flac3d_project.yaml")
+    neutral_config = safe_path(root, "research_project.json")
+    legacy_config = safe_path(root, "flac3d_project.yaml")
     records_path = safe_path(root, "research/records")
     project_id = None
     store_state = "not_initialized"
     revision = None
-    if config.is_file():
+    if neutral_config.exists() or legacy_config.exists():
         # Use authoritative transactions, not a potentially stale Research Map.
         store = ResearchStore(root)
         transactions = store.list_transactions()
@@ -172,6 +173,10 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                 if isinstance(locator, dict) and locator.get("path_kind") == "project_relative" and isinstance(locator.get("path"), str):
                     loc = _location(root, locator["path"])
                     loc["citation"] = locator.get("citation")
+                elif isinstance(locator, dict) and locator.get("path_kind") == "record_embedded":
+                    loc = {"recorded_locator": locator,
+                           "status": "embedded_record_payload; expand show",
+                           "source_original_status": "not_revalidated_this_call"}
                 materials.append({"kind": "asset", "id": rid, "revision": record["revision"],
                                   "recorded_status": record.get("status"),
                                   "basis": "registered Asset; not a new read", "location": loc,

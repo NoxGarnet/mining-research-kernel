@@ -66,6 +66,8 @@ version-specific commands.
 These are illustrative paths and user decisions, not facts to copy into a real
 project. Use only notes relevant to the actual request; no field is mandatory.
 No `inputs/`, `work/`, `results/`, or `knowledge/` directory is required.
+Persistent task and evidence records are an [optional next step](OPTIONAL_RESEARCH.md),
+enabled explicitly without relocating the project's materials.
 
 ## Do the work and write back
 

@@ -495,7 +495,9 @@ class ResearchStore:
     """An immutable, single-writer transaction store rooted at one project."""
 
     def __init__(self, project_root: str | os.PathLike[str], injection_hook: Callable[..., Any] | None = None):
-        self.project_root = Path(project_root).resolve()
+        raw_root = Path(project_root).expanduser()
+        _check_record_path(raw_root)
+        self.project_root = raw_root.resolve()
         if not self.project_root.is_dir():
             raise ResearchStoreError(f"project root is not a directory: {self.project_root}")
         self.project_id, self._configured_map = self._read_project_config()
@@ -505,12 +507,8 @@ class ResearchStore:
         self.injection_hook = injection_hook
 
     def _read_project_config(self) -> tuple[str, Path]:
-        config_path = self.project_root / "flac3d_project.yaml"
-        if not config_path.is_file():
-            raise ResearchStoreError("missing project config: flac3d_project.yaml")
         try:
-            from flac3d_project import load_config
-
+            from research_project import load_config
             config = load_config(self.project_root)
         except Exception as exc:
             raise ResearchStoreError(f"invalid project config: {exc}") from exc

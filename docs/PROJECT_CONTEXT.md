@@ -91,8 +91,12 @@ A single unusually large entry may exceed the target and is explicitly flagged
 as `oversized_single_entry`; it is not silently dropped or replaced with an
 error. Existing `resume` keeps its separate character-budget contract.
 
-The store currently requires the existing `flac3d_project.yaml` configuration.
-Unconfigured `research/records` are reported but not interpreted. Malformed
+The store accepts the optional neutral `research_project.json` configuration
+or the existing `flac3d_project.yaml`; both together are rejected. See
+[optional research records](OPTIONAL_RESEARCH.md) for explicit enablement and
+documentation-query writeback. Embedded query snapshots expose a `show`
+command rather than a filesystem target. Unconfigured `research/records` are
+reported but not interpreted. Malformed
 configuration or transactions cause an error rather than a healthy-looking
 empty view. The saved Research Map is not read or rebuilt. Validated store
 loading currently reads the transaction history; this is not a low-I/O index

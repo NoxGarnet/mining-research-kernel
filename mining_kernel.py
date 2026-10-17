@@ -80,6 +80,20 @@ def main(argv=None):
     dc.add_argument("--product-version", required=True)
     dc.add_argument("--anchor")
     dc.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    er = sub.add_parser("enable-research", help="opt in an existing project to persistent research records")
+    er.add_argument("--project-root", required=True)
+    er.add_argument("--project-id", required=True)
+    dr = sub.add_parser("documentation-record", help="query registered local documentation and persist its bounded observation")
+    dr.add_argument("--project-root", required=True)
+    dr.add_argument("--task-id", required=True)
+    dr.add_argument("--question", required=True)
+    dr.add_argument("--registration", required=True)
+    dr.add_argument("--page", required=True)
+    dr.add_argument("--command", dest="syntax_command", required=True)
+    dr.add_argument("--product", required=True)
+    dr.add_argument("--product-version", required=True)
+    dr.add_argument("--anchor")
+    dr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
     init = sub.add_parser("init-flac3d-project")
     init.add_argument("path")
     init.add_argument("--project-id", required=True)
@@ -136,7 +150,34 @@ def main(argv=None):
     cg4 = sub.add_parser("cognition-failure-gate"); cg4.add_argument("--project-root", required=True); cg4.add_argument("--object-ref"); cg4.add_argument("--task-id"); cg4.add_argument("--route-id"); cg4.add_argument("--version")
     cr4 = sub.add_parser("cognition-review"); cr4.add_argument("--project-root", required=True); cr4.add_argument("proposal_id"); cr4.add_argument("--operation-id", required=True); cr4.add_argument("--review-ref", required=True); cr4.add_argument("--evidence-json", default="null"); cr4.add_argument("--scope-json", default="null"); cr4.add_argument("--impact"); cr4.add_argument("--decision", choices=("accept", "reject", "contested"), default="accept")
     args = ap.parse_args(argv); workspace = Path(args.workspace).resolve()
-    if args.command == "init-workspace":
+    if args.command == "enable-research":
+        from research_project import enable_research
+        out = enable_research(args.project_root, args.project_id)
+    elif args.command == "documentation-record":
+        from mining_research_kernel.documentation_records import record_documentation_query
+        out = record_documentation_query(
+            args.project_root, task_id=args.task_id, question=args.question,
+            registration=args.registration, page=args.page, command=args.syntax_command,
+            product=args.product, product_version=args.product_version,
+            anchor=args.anchor, task_context=args.task_context,
+        )
+        # Return the observation and its record locators once. Full packets,
+        # Decisions and transaction payloads remain available through show.
+        packet = out["task_packet"]
+        out = {
+            "type": "DocumentationRecordReceipt",
+            "task_id": out["task_id"], "decision_id": out["decision_id"],
+            "asset_refs": packet["asset_refs"], "evidence_refs": packet["evidence_refs"],
+            "documentation_result": out["documentation_result"],
+            "replayed": out["replayed"], "query_performed": out["query_performed"],
+            "task_state": packet["state"], "completion_scope": packet["completion_scope"],
+            "research_judgment_status": packet["research_judgment_status"],
+            "run_created": False, "verification_created": False,
+        }
+        if out["documentation_result"].get("status") not in {"VERIFIED", "SYNTHETIC_VERIFIED"}:
+            print(json.dumps(out, ensure_ascii=False, indent=2))
+            return 2
+    elif args.command == "init-workspace":
         from workspace_init import init_workspace
         out = {"initialized": str(init_workspace(args.path, args.project_id, args.question)),
                "project_id": args.project_id, "files": ["AGENTS.md", "INDEX.md", f"projects/{args.project_id}/START.md"]}
