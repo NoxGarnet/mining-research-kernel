@@ -77,7 +77,14 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
         raise ValueError("offset must be nonnegative and limit must be between 1 and 20")
     entries, materials, tasks, failures, decisions = [], [], [], [], []
     warnings = []
-    for name in ("START.md", "README.md"):
+    neutral_config = safe_path(root, "research_project.json")
+    legacy_config = safe_path(root, "flac3d_project.yaml")
+    entry_names = ["START.md", "README.md"]
+    if neutral_config.exists() or legacy_config.exists():
+        from research_project import load_config
+        configured_entry = load_config(root).get("entry", "START.md")
+        entry_names = list(dict.fromkeys([configured_entry, *entry_names]))
+    for name in entry_names:
         path = safe_path(root, name)
         if not path.is_file():
             continue
@@ -99,7 +106,7 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
             linked_paths.add(relative.replace("\\", "/").removeprefix("./"))
             materials.append({"kind": "material", "id": f"{name}:{match.start()}",
                               "title": _preview(title), "basis": f"explicit link in {name}",
-                              "location": _location(root, relative), "anchor": unquote(url.fragment)})
+                              "location": _location(root, (Path(name).parent / relative).as_posix()), "anchor": unquote(url.fragment)})
         for match in re.finditer(r"(?<!`)`([^`\n]+)`(?!`)", prose):
             if any(start <= match.start() < end for start, end in link_spans):
                 continue
@@ -110,9 +117,9 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
             materials.append({"kind": "material", "id": f"{name}:inline:{match.start()}",
                               "title": _preview(relative), "basis": f"explicit inline file path in {name}",
                               "entry_line": text.count("\n", 0, match.start()) + 1,
-                              "location": _location(root, relative)})
+                              "location": _location(root, (Path(name).parent / relative).as_posix())})
     if not entries:
-        warnings.append("No START.md or README.md; no project purpose inferred.")
+        warnings.append("No configured entry, START.md or README.md; no project purpose inferred.")
 
     if manifest is not None:
         path = safe_path(root, manifest)
@@ -130,8 +137,6 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                               "basis": f"explicit manifest {manifest}",
                               "location": _location(root, item["path"])})
 
-    neutral_config = safe_path(root, "research_project.json")
-    legacy_config = safe_path(root, "flac3d_project.yaml")
     records_path = safe_path(root, "research/records")
     project_id = None
     store_state = "not_initialized"
