@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-This overview and the workspace-start and continuing-research guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
+This overview and the workspace-start, continuing-research and bounded FLAC3D script-review guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
 
 A filesystem-native workspace and optional research kernel for Agent-assisted
 mining research. Start with a small Markdown workspace, then enable durable
@@ -19,6 +19,7 @@ offline examples use the Python standard library.
 - [Read documentation passages](docs/ITASCA_READING.md): read registered official HTML sections or query an existing Itasca MCP documentation connection, preserving their different provenance.
 - [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
+- [Bounded FLAC3D script review](docs/FLAC3D_SCRIPT_REVIEW.md): capture selected lines and a file hash, bind read official passages, and save cited findings; the first command family is `zone cmodel assign`.
 
 Give your Agent the question and material locations, for example:
 "比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。"
@@ -126,6 +127,7 @@ an independent review.
 
 ## Current capabilities
 
+- Recoverable FLAC3D excerpt reviews with selected lines, file hashes, version-matched official passages and authored findings; optionally compare a selected current file read-only. This does not execute scripts or certify model correctness; see the [script review guide](docs/FLAC3D_SCRIPT_REVIEW.md).
 - Continued source review under one ResearchQuestion, retaining prior task and
   judgment revisions, with read-only progress and regenerable Markdown reports;
   see the [continuing research guide](docs/CONTINUING_RESEARCH.md).

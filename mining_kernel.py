@@ -203,6 +203,30 @@ def main(argv=None):
     rd.add_argument("--limit", type=int, default=10)
     rd.add_argument("--max-reading-chars", type=int, default=12000)
     rd.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    sr = sub.add_parser("script-review-start", help="capture selected FLAC3D lines and bind previously read official passages")
+    sr.add_argument("--project-root", required=True)
+    sr.add_argument("--task-id", required=True)
+    sr.add_argument("--question", required=True)
+    sr.add_argument("--script", required=True)
+    sr.add_argument("--start-line", type=int, required=True)
+    sr.add_argument("--end-line", type=int, required=True)
+    sr.add_argument("--product-version", required=True)
+    sr.add_argument("--documentation-asset-ref", action="append", required=True)
+    sr.add_argument("--encoding", default="utf-8-sig")
+    sr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    sr = sub.add_parser("script-review-record", help="record authored findings with captured line and documentation evidence citations")
+    sr.add_argument("--project-root", required=True)
+    sr.add_argument("--task-id", required=True)
+    sr.add_argument("--operation-id", required=True)
+    sr.add_argument("--review-file", required=True)
+    sr = sub.add_parser("script-review-progress", help="recover a saved script review; optionally compare an explicitly selected current file")
+    sr.add_argument("--project-root", required=True)
+    sr.add_argument("--task-id", required=True)
+    sr.add_argument("--script", help="optional current script for read-only hash comparison; never updates the snapshot")
+    sr = sub.add_parser("script-review-report", help="render a derived Markdown report from saved script review records")
+    sr.add_argument("--project-root", required=True)
+    sr.add_argument("--task-id", required=True)
+    sr.add_argument("--output", help="optional separate in-project Markdown output")
     lc = sub.add_parser("literature-start", help="prepare a question-oriented comparison of selected distinct papers")
     lc.add_argument("--project-root", required=True)
     lc.add_argument("--task-id", required=True)
@@ -363,6 +387,31 @@ def main(argv=None):
         if packet["research_judgment_status"] == "INSUFFICIENT":
             print(json.dumps(out, ensure_ascii=False, indent=2))
             return 2
+    elif args.command == "script-review-start":
+        from mining_research_kernel.script_review import start_script_review
+        out = start_script_review(
+            args.project_root, task_id=args.task_id, question=args.question, script=args.script,
+            start_line=args.start_line, end_line=args.end_line, product_version=args.product_version,
+            documentation_asset_refs=args.documentation_asset_ref, encoding=args.encoding,
+            task_context=args.task_context)
+    elif args.command == "script-review-record":
+        from mining_research_kernel.script_review import record_script_review
+        review = json.loads(Path(args.review_file).read_text(encoding="utf-8-sig"))
+        out = record_script_review(args.project_root, task_id=args.task_id,
+                                   operation_id=args.operation_id, review=review)
+    elif args.command == "script-review-progress":
+        from mining_research_kernel.script_review import script_review_progress
+        out = script_review_progress(args.project_root, task_id=args.task_id, script=args.script)
+    elif args.command == "script-review-report":
+        from mining_research_kernel.script_review import render_script_review_report
+        markdown = render_script_review_report(args.project_root, task_id=args.task_id)
+        if args.output is None:
+            print(markdown, end="" if markdown.endswith("\n") else "\n")
+            return 0
+        target, digest = _write_research_report(args.project_root, args.task_id, args.output, markdown)
+        out = {"type": "ScriptReviewReportReceipt", "task_id": args.task_id, "output": target,
+               "sha256": digest, "authority": "derived", "source_queries_performed": False,
+               "run_created": False, "verification_created": False}
     elif args.command in {"research-begin", "research-continue"}:
         from mining_research_kernel.research_continuation import begin_research, continue_research
         if args.command == "research-begin":
