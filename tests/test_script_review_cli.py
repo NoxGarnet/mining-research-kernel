@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -191,6 +192,20 @@ class ScriptReviewCLITests(unittest.TestCase):
         self.assertTrue(injected)
         self.assertIsNone(store.latest_record("review", "TaskState"))
         self.assertEqual(self.original, self.script.read_bytes())
+
+    def test_project_relative_review_replays_after_relocation_without_rereading(self):
+        from mining_research_kernel.script_review import start_script_review
+        original = self.start()
+        relocated = self.base / "relocated project"
+        shutil.copytree(self.root, relocated)
+        before = {p.name: p.read_bytes() for p in (relocated / "research/records").glob("*.json")}
+        with patch("mining_research_kernel.script_review._read_script", side_effect=AssertionError("must not reread")):
+            replay = start_script_review(relocated, task_id="review", question="Compare saved lines",
+                script="model.dat", start_line=3, end_line=3, product_version="9.6.44",
+                documentation_asset_refs=self.doc_packet["asset_refs"], task_context="synthetic")
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(original["script_snapshot"], replay["script_snapshot"])
+        self.assertEqual(before, {p.name: p.read_bytes() for p in (relocated / "research/records").glob("*.json")})
 
 
 if __name__ == "__main__":

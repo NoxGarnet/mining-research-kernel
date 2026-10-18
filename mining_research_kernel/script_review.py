@@ -182,8 +182,11 @@ def start_script_review(project_root, *, task_id: str, question: str, script: st
     if task_context not in {"production", "synthetic"}: raise ValueError("task_context must be production or synthetic")
     path, label = _safe_source_path(root, script)
     store = ResearchStore(root)
+    # Relative material identities move with the project. Only external caller
+    # labels need a host-path digest to distinguish different same-name files.
+    source_identity = str(path) if label.startswith("caller:") else label
     spec={"question":question.strip(),"script":label,
-          "script_identity_sha256":hashlib.sha256(str(path).encode("utf-8")).hexdigest(),
+          "script_identity_sha256":hashlib.sha256(source_identity.encode("utf-8")).hexdigest(),
           "start_line":start_line,"end_line":end_line,
           "product_version":product_version.strip(),"documentation_asset_refs":list(documentation_asset_refs) if isinstance(documentation_asset_refs,list) else documentation_asset_refs,
           "encoding":encoding,"task_context":task_context}
