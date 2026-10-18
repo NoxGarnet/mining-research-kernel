@@ -190,6 +190,9 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                 elif packet.get("input", {}).get("review_mode") == "flac3d_script_review":
                     tasks[-1]["script_review_progress_argv"] = _argv(root, "script-review-progress", "--task-id", rid)
                     tasks[-1]["script_review_report_argv"] = _argv(root, "script-review-report", "--task-id", rid)
+                elif packet.get("input", {}).get("review_mode") in {"result_csv_import", "result_csv_comparison"}:
+                    tasks[-1]["result_progress_argv"] = _argv(root, "result-progress", "--task-id", rid)
+                    tasks[-1]["result_report_argv"] = _argv(root, "result-report", "--task-id", rid)
             elif record["type"] == "Asset":
                 locator = record.get("locator", {})
                 loc = ({"recorded_locator": locator, "status": "caller_label_or_unresolved; supply location explicitly"})

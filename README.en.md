@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-This overview and the workspace-start, continuing-research and bounded FLAC3D script-review guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
+This overview and the workspace-start, continuing-research, bounded FLAC3D script-review and existing-CSV result-comparison guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
 
 A filesystem-native workspace and optional research kernel for Agent-assisted
 mining research. Start with a small Markdown workspace, then enable durable
@@ -20,6 +20,7 @@ offline examples use the Python standard library.
 - [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
 - [Bounded FLAC3D script review](docs/FLAC3D_SCRIPT_REVIEW.md): capture selected lines and a file hash, bind read official passages, and save cited findings; the first command family is `zone cmodel assign`.
+- [Compare existing CSV results](docs/RESULT_COMPARISON.md): capture declared units and conditions, compare explicitly selected points, link saved research context and recover a derived report.
 
 Give your Agent the question and material locations, for example:
 "比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。"
@@ -127,6 +128,7 @@ an independent review.
 
 ## Current capabilities
 
+- Read-only result CSV captures and bounded two-case comparisons preserve raw values, physical line locators, declared quantity/units/conditions and quality diagnostics. Compute signed deltas at selected point IDs, associate historical script/documentation context and recover reports; see the [result comparison guide](docs/RESULT_COMPARISON.md).
 - Recoverable FLAC3D excerpt reviews with selected lines, file hashes, version-matched official passages and authored findings; optionally compare a selected current file read-only. This does not execute scripts or certify model correctness; see the [script review guide](docs/FLAC3D_SCRIPT_REVIEW.md).
 - Continued source review under one ResearchQuestion, retaining prior task and
   judgment revisions, with read-only progress and regenerable Markdown reports;

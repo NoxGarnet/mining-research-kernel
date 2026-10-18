@@ -1,0 +1,76 @@
+# Read and compare existing CSV results
+
+[简体中文](RESULT_COMPARISON.zh-CN.md) | **English** · [Home](../README.en.md)
+
+Capture an existing result export, retain its source hash and declared metadata, compare explicitly selected point IDs, and recover the same comparison in another session. Enable research records only when needed. Original files remain in place.
+
+The user chooses the question, selected points and next work. The Agent reads existing project evidence and records missing information without inventing units or asking the user to repeat settled decisions.
+
+## Format and interpretation
+
+The first format is one case and quantity per comma-separated CSV, with exactly two headers, `point_id,value`, in either column order:
+
+```csv
+point_id,value
+P1,-12.5
+P2,-8.0
+P3,
+```
+
+Limits: 2 MiB per file, 2,000 data records, and 100 explicitly selected points per comparison. Strict decoding defaults to `utf-8-sig`, including UTF-8 BOM support; select another known encoding explicitly. Invalid CSV structure or headers are rejected. Missing, invalid, nonfinite and duplicate-point values retain diagnostics; they are not filled with zero or silently deduplicated. Other export layouts need a separately documented conversion copy, retaining the original source.
+
+Record quantity, units, column meanings, point definitions and case conditions alongside the capture. These are caller declarations, not proof of the software, export process or solver state. Numeric deltas are **candidate − baseline**, aligned by selected `point_id`, independently of row order. Unknown or mismatched quantity/unit labels and unavailable, missing or ambiguous values prevent the affected deltas. No implicit unit conversion, improvement percentage or engineering interpretation is supplied. Differences and uncertainty in conditions or point definitions remain gaps.
+
+## Agent procedure
+
+Run from the repository. Keep inputs and generated records in the selected project. Skip enabling if already enabled:
+
+```powershell
+$projectRoot = 'D:\replace-with-user-chosen\existing-study'
+python -B -X utf8 mining_kernel.py enable-research --project-root $projectRoot --project-id study-01
+```
+
+Prepare a JSON metadata file for each export:
+
+```json
+{
+  "case_id": "baseline",
+  "quantity": "displacement_y",
+  "unit": "mm",
+  "column_meanings": {"point_id": "Selected monitoring-point identifier", "value": "Displacement with the declared sign convention"},
+  "point_basis": "Shared point definitions established in the project record",
+  "conditions": {"stage": "User-confirmed construction stage", "coordinate_frame": "User-confirmed coordinates and sign convention"},
+  "origin": "provided_export"
+}
+```
+
+These are examples, not project facts. Unknown fields may be `null` or omitted; `case_id` is required. Authored teaching data require `origin: synthetic` and `--task-context synthetic` and cannot support production comparison.
+
+```powershell
+python -B -X utf8 mining_kernel.py result-import --project-root $projectRoot --task-id baseline-read-01 --question "Record the existing baseline displacement export" --csv exports/baseline.csv --metadata-file 'D:\replace-with-user-chosen\baseline-metadata.json'
+python -B -X utf8 mining_kernel.py result-import --project-root $projectRoot --task-id candidate-read-01 --question "Record the existing candidate displacement export" --csv exports/candidate.csv --metadata-file 'D:\replace-with-user-chosen\candidate-metadata.json'
+```
+
+The receipt identifies the comparable capture Asset. Paths may be project-relative or explicitly selected external absolute paths; external Host paths are not automatically published in persisted records. Capture preserves the whole-file hash, raw selected values, physical line locators and diagnostics, allowing historical recovery without reopening the source.
+
+```powershell
+$baselineAsset = '<baseline capture Asset ID>'
+$candidateAsset = '<candidate capture Asset ID>'
+python -B -X utf8 mining_kernel.py result-compare --project-root $projectRoot --task-id displacement-compare-01 --question "What are the numeric differences at the selected points?" --baseline-asset-ref $baselineAsset --candidate-asset-ref $candidateAsset --point P1 --point P2 --point P3 --comparability-note "Compare only selected labels; recorded conditions and gaps still apply" --related-task '<existing script-review task ID>' --next-action "The user chooses whether to investigate conditions or more points"
+python -B -X utf8 mining_kernel.py result-report --project-root $projectRoot --task-id displacement-compare-01 --output reports/displacement-comparison.md
+```
+
+Omit or repeat `--related-task` to associate selected script reviews, documentation readings or other research tasks. The report preserves their exact historical revisions, task contexts and documentation trust classes; production comparison rejects synthetic related tasks. Association does not prove that the CSV was generated by that script. Solver provenance requires separate evidence. This workflow starts no solver and creates no Run or engineering Verification.
+
+## Recover and inspect changes
+
+```powershell
+python -B -X utf8 mining_kernel.py result-progress --project-root $projectRoot --task-id displacement-compare-01
+python -B -X utf8 mining_kernel.py result-report --project-root $projectRoot --task-id displacement-compare-01
+```
+
+Default recovery reads saved captures, judgments, gaps and next actions without reopening CSV, scripts or manuals. To compare current files explicitly, supply a JSON object mapping capture Asset IDs to current paths through `result-progress --source-paths-file`. Unchecked, unchanged, changed, missing and read-error states remain distinct.
+
+Identical task requests replay saved records. New source versions, metadata or selected scope require new task IDs and preserve prior comparisons. Successful processing can still produce an `INSUFFICIENT` judgment. Write the task ID, agreed question, report path and pending decisions into `START.md`. Reports are derived views; the writer protects entries, registered materials and unrelated existing files.
+
+The [offline synthetic example](../examples/result_comparison/README.md) demonstrates reordered point rows, missing data, linked script/documentation context and fresh-process recovery. Its authored tables are not real simulation results.
