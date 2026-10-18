@@ -39,6 +39,11 @@ that a complete model or engineering decision has been checked.
    separate evidence types. A registered adapter does not prove a tool is
    available; a solver run needs a suitable environment and task-specific
    authorization.
+   For persistent line-level observations, the optional
+   [bounded script review](FLAC3D_SCRIPT_REVIEW.md) binds selected script lines
+   and a file hash to already read official passages. Its first scope is
+   literal single-line `zone cmodel assign`; findings are authored and cited,
+   without enabling the production static-check or execution gates.
 5. **Write an auditable report.** Link each finding to an input path and line
    or other locator, and to the documentation page/section. Separate direct
    observations, interpretations or inferences, and unchecked items. Record

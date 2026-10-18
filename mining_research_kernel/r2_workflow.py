@@ -534,11 +534,14 @@ def _literature_records(root: Path, project_id: str, task_id: str, request: Mapp
 
 def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] | str,
                documentation_result: Mapping[str, Any] | str | None = None, *,
-               _validated_research_question: Mapping[str, Any] | None = None) -> dict[str, Any]:
+               _validated_research_question: Mapping[str, Any] | None = None,
+               _expected_material_revisions: Mapping[str, int] | None = None) -> dict[str, Any]:
     """Start a task; documentation_result is reserved for trusted Host evidence.
 
     Hosts must obtain that argument from their DocumentationProvider, never
     forward an Agent request field or arbitrary CLI JSON into it.
+    Internal services may pin selected source revisions through the atomic
+    commit with _expected_material_revisions; this does not reread sources.
     """
     root, config, project = _load_project(project_root)
     request_value = load_json_value(request, "request-json")
@@ -570,14 +573,14 @@ def task_start(project_root: str | os.PathLike[str], request: Mapping[str, Any] 
     store = ResearchStore(root)
     continuation = None
     question_record = None
-    expected_revisions = {}
+    expected_revisions = dict(_expected_material_revisions or {})
     previous_route = None
     if _validated_research_question is not None:
         if not isinstance(_validated_research_question, Mapping):
             raise ValueError("validated research question context must be an object")
         question_record = copy.deepcopy(dict(_validated_research_question["question_record"]))
         continuation = copy.deepcopy(dict(_validated_research_question["continuation"]))
-        expected_revisions = dict(_validated_research_question["expected_revisions"])
+        expected_revisions.update(_validated_research_question["expected_revisions"])
         current_question = store.latest_record(question_record.get("id"), "ResearchQuestion")
         if current_question != question_record:
             raise ValueError("validated ResearchQuestion context does not match the stored record")
@@ -726,12 +729,15 @@ def task_inspect(project_root: str | os.PathLike[str], task_id: str) -> dict[str
 
 
 def task_record_evidence_review(project_root: str | os.PathLike[str], task_id: str,
-                                operation_id: str, assessment: Mapping[str, Any] | str) -> dict[str, Any]:
+                                operation_id: str, assessment: Mapping[str, Any] | str, *,
+                                _expected_material_revisions: Mapping[str, int] | None = None) -> dict[str, Any]:
     """Persist a bounded host read and provisional judgment for an evidence-review task.
 
     This operation records what the Host actually read and what remains
     unverified.  It deliberately creates a Decision and TaskState revision,
     never a Run or Verification, and never changes Asset/Evidence provenance.
+    _expected_material_revisions lets a composing service reject a concurrent
+    source-record change at commit, after its source validation has completed.
     """
     root = Path(project_root).expanduser().resolve()
     task_id = _id(task_id, "task_id")
@@ -943,7 +949,7 @@ def task_record_evidence_review(project_root: str | os.PathLike[str], task_id: s
         transaction = store.commit(
             operation_id, {"role": "acceptance_agent", "model": "r2.workflow"},
             [decision, task_record], relationships,
-            expected_revisions={task_id: int(prior["revision"])},
+            expected_revisions={**dict(_expected_material_revisions or {}), task_id: int(prior["revision"])},
         )
     except ResearchStoreError:
         latest = store.latest_record(task_id, "TaskState")
