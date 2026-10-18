@@ -2,7 +2,7 @@
 
 **简体中文** | [English](README.en.md)
 
-语言链接用于切换本项目的介绍页。详细指南目前以英文为主，部分示例使用中文。
+本介绍页以及“建立轻量工作区”和“持续研究”指南均可切换中英文。其余指南目前主要为英文，部分示例使用中文。
 
 一个基于本地文件的轻量工作区与可选研究内核，用于协助 Agent 开展矿业研究。
 先用少量 Markdown 文件组织项目；需要时，再启用持久研究记录和领域工作流。
@@ -10,11 +10,11 @@
 
 ## 开始或接续项目
 
-- [建立轻量工作区](docs/START_WORKSPACE.md)：创建三个入口文件，从一个实际研究问题开始。
+- [建立轻量工作区](docs/START_WORKSPACE.zh-CN.md)：创建三个入口文件，从一个实际研究问题开始。
 - [接入已有项目](docs/EXISTING_PROJECT.md)：保留资料原有位置，只补齐必要入口，明确本次协助任务。
 - [接续已有项目](docs/PROJECT_CONTEXT.md)：查找项目入口、判断和资料位置，无需先创建任务或读取原始材料。
 - [按需启用研究记录](docs/OPTIONAL_RESEARCH.md)：为已有项目增加持久记录，保存本地资料查询的依据和限制。
-- [围绕同一问题持续研究](docs/CONTINUING_RESEARCH.md)：恢复原判断，补读选定材料，生成包含变化与缺口的报告。
+- [围绕同一问题持续研究](docs/CONTINUING_RESEARCH.zh-CN.md)：恢复原判断，补读选定材料，生成包含变化与缺口的报告。
 - [阅读软件文档段落](docs/ITASCA_READING.md)：读取已登记的官方本地 HTML，或查询已有 Itasca MCP 文档连接，并保留不同来源的出处。
 - [围绕问题比较文献](docs/LITERATURE_COMPARISON.md)：按选定维度比较论文与可选软件说明，保留页码引用和缺失信息。
 - [FLAC3D 核查工作流](docs/FLAC3D_FIRST_TASK.md)：定位输入、确认软件版本、查阅适用的官方说明，并保存可接续的核查结果。
@@ -104,7 +104,7 @@ Agent 通过 CLI 或公开 Python API 调用内核；模型、宿主应用与用
 
 ## 当前能力
 
-- 在同一个 ResearchQuestion 下接续资料研究，保留历史任务和判断修订，提供只读进度恢复及可重建的 Markdown 报告；见[持续研究指南](docs/CONTINUING_RESEARCH.md)。
+- 在同一个 ResearchQuestion 下接续资料研究，保留历史任务和判断修订，提供只读进度恢复及可重建的 Markdown 报告；见[持续研究指南](docs/CONTINUING_RESEARCH.zh-CN.md)。
 - 简短恢复视图区分待分析任务与继承的历史判断，可展开准确历史版本，并为兼容的资料研究任务提供进展和报告入口。
 - 在明确范围内检索 Zotero、读取选定页面、综合带引用的资料并恢复研究；见[资料研究工作流](docs/RESEARCH_SOURCES.md)。
 - 通过明确的宿主登记读取官方本地 HTML 段落，或查询仅用于文档的 Itasca MCP。MCP 语料内容保留为派生阅读来源；见[文档阅读](docs/ITASCA_READING.md)。

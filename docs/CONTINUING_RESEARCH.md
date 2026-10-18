@@ -1,5 +1,9 @@
 # Continue one research question
 
+[简体中文](CONTINUING_RESEARCH.zh-CN.md) | **English** · [Home](../README.en.md)
+
+This guide is bilingual. Other linked guides remain mostly in English.
+
 Give the Agent the question and material locations, or point it to an existing
 task. For example:
 

@@ -1,5 +1,9 @@
 # Start a lightweight workspace
 
+[简体中文](START_WORKSPACE.zh-CN.md) | **English** · [Home](../README.en.md)
+
+This guide is bilingual. Other linked guides remain mostly in English.
+
 Create a new or empty directory from a real research question. The command
 creates only `AGENTS.md`, `INDEX.md`, and `projects/<ID>/START.md`.
 
@@ -80,5 +84,7 @@ navigation; keep project status and evidence in the project. If persistent
 questions and judgments are needed, [enable research records explicitly](OPTIONAL_RESEARCH.md).
 Ordinary Markdown use does not require this step; existing FLAC3D kernel
 configuration remains supported without migration.
+For supplementary readings, judgment updates and reports under the same question,
+see the [continuing research guide](CONTINUING_RESEARCH.md).
 The synthetic workflow demonstrates kernel mechanics only; it is not PFC, AE,
 or a real FLAC3D solve.
