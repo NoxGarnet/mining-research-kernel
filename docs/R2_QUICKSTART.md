@@ -88,6 +88,17 @@ python mining_kernel.py show --project-root path/to/project --record-id task-dem
 python mining_kernel.py show --project-root path/to/project --record-id decision-id --section judgment
 ```
 
+When a continuation binds a historical Decision, use its returned expansion
+argv or name the exact revision:
+
+```powershell
+python mining_kernel.py show --project-root path/to/project --record-id decision-id --revision 1 --section judgment
+```
+
+Omitting `--revision` retains the latest-record lookup. An unavailable explicit
+revision is an error; it is never replaced with the latest one. Pending
+continuations expose inherited context separately from a new current judgment.
+
 The previous `task-inspect` command remains the complete TaskPacket contract
 for callers that need every field. `resume` and `show` are projections over
 the same transaction records, not a second authority.

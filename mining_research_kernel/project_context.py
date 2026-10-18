@@ -9,8 +9,9 @@ from urllib.parse import unquote, urlsplit
 
 from .core import safe_path
 from .on_demand import (
-    _decision_records, _decision_selection, _judgment, _latest_records,
-    _question_and_routes,
+    _continuation_parent, _decision_bound_to_task_state, _decision_records,
+    _decision_selection, _judgment, _latest_records, _question_and_routes,
+    is_research_review_continuation, is_research_review_task,
 )
 from .records import ResearchStore
 
@@ -159,8 +160,13 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
             if record["type"] == "TaskState":
                 packet = record["packet"]
                 question, _, routes = _question_and_routes(latest, packet)
-                related = _decision_records(latest, rid, packet, [r["id"] for r in routes])
-                selection = _decision_selection(related, rid, packet)
+                inherited = (_continuation_parent(store, rid, packet)
+                             if is_research_review_continuation(packet) else None)
+                bound_current = _decision_bound_to_task_state(store, record)
+                related = _decision_records(latest, rid, packet, [r["id"] for r in routes],
+                                            exact_decisions=[d for d in (inherited, bound_current) if d])
+                selection = _decision_selection(related, rid, packet,
+                                                [inherited] if inherited and not packet.get("review_record_ref") else None)
                 current = selection["current"]
                 tasks.append({"kind": "task", "id": rid, "revision": record["revision"],
                               "state": record.get("state"), "question": _preview(question),
@@ -169,9 +175,18 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                               "current_decisions_preview": [{"id": d["id"], "revision": d["revision"],
                                   "status": d.get("status"), "summary": _preview(_judgment(d).get("summary", d.get("statement"))),
                                   "limits": "expand resume/show before relying on this judgment"} for d in current[:2]],
+                              "inherited_decisions_preview": [{"id": d["id"], "revision": d["revision"],
+                                  "summary": _preview(_judgment(d).get("summary", d.get("statement"))),
+                                  "state": "inherited_pending",
+                                  "expansion_argv": _argv(root, "show", "--record-id", d["id"],
+                                                          "--revision", str(d["revision"]),
+                                                          "--section", "judgment")} for d in selection.get("inherited", [])],
                               "history_count": len(selection["history"]),
                               "conflict_count": len(selection["conflicts"]),
                               "resume_argv": _argv(root, "resume", "--task", rid)})
+                if is_research_review_task(packet):
+                    tasks[-1]["research_progress_argv"] = _argv(root, "research-progress", "--task-id", rid)
+                    tasks[-1]["research_report_argv"] = _argv(root, "research-report", "--task-id", rid)
             elif record["type"] == "Asset":
                 locator = record.get("locator", {})
                 loc = ({"recorded_locator": locator, "status": "caller_label_or_unresolved; supply location explicitly"})
