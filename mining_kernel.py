@@ -227,6 +227,33 @@ def main(argv=None):
     sr.add_argument("--project-root", required=True)
     sr.add_argument("--task-id", required=True)
     sr.add_argument("--output", help="optional separate in-project Markdown output")
+    ri = sub.add_parser("result-import", help="capture a bounded point_id,value CSV with declared result metadata")
+    ri.add_argument("--project-root", required=True)
+    ri.add_argument("--task-id", required=True)
+    ri.add_argument("--question", required=True)
+    ri.add_argument("--csv", dest="csv_path", required=True)
+    ri.add_argument("--metadata-file", required=True)
+    ri.add_argument("--encoding", default="utf-8-sig")
+    ri.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    rcsv = sub.add_parser("result-compare", help="compare selected point IDs from two saved result captures")
+    rcsv.add_argument("--project-root", required=True)
+    rcsv.add_argument("--task-id", required=True)
+    rcsv.add_argument("--question", required=True)
+    rcsv.add_argument("--baseline-asset-ref", required=True)
+    rcsv.add_argument("--candidate-asset-ref", required=True)
+    rcsv.add_argument("--point", dest="point_ids", action="append", required=True)
+    rcsv.add_argument("--comparability-note", default="")
+    rcsv.add_argument("--related-task", dest="related_task_ids", action="append")
+    rcsv.add_argument("--next-action", default="User chooses any further analysis.")
+    rcsv.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    rp = sub.add_parser("result-progress", help="recover historical result data; optionally compare explicitly selected current files")
+    rp.add_argument("--project-root", required=True)
+    rp.add_argument("--task-id", required=True)
+    rp.add_argument("--source-paths-file", help="optional JSON object mapping selected capture Asset IDs to current file paths")
+    rr = sub.add_parser("result-report", help="render a derived result comparison report from persisted records")
+    rr.add_argument("--project-root", required=True)
+    rr.add_argument("--task-id", required=True)
+    rr.add_argument("--output", help="optional separate in-project Markdown output")
     lc = sub.add_parser("literature-start", help="prepare a question-oriented comparison of selected distinct papers")
     lc.add_argument("--project-root", required=True)
     lc.add_argument("--task-id", required=True)
@@ -410,6 +437,34 @@ def main(argv=None):
             return 0
         target, digest = _write_research_report(args.project_root, args.task_id, args.output, markdown)
         out = {"type": "ScriptReviewReportReceipt", "task_id": args.task_id, "output": target,
+               "sha256": digest, "authority": "derived", "source_queries_performed": False,
+               "run_created": False, "verification_created": False}
+    elif args.command == "result-import":
+        from mining_research_kernel.result_comparison import import_result_csv
+        metadata = json.loads(Path(args.metadata_file).read_text(encoding="utf-8-sig"))
+        out = import_result_csv(args.project_root, task_id=args.task_id, question=args.question,
+                                csv_path=args.csv_path, metadata=metadata, encoding=args.encoding,
+                                task_context=args.task_context)
+    elif args.command == "result-compare":
+        from mining_research_kernel.result_comparison import compare_results
+        out = compare_results(args.project_root, task_id=args.task_id, question=args.question,
+                              baseline_asset_ref=args.baseline_asset_ref, candidate_asset_ref=args.candidate_asset_ref,
+                              point_ids=args.point_ids, comparability_note=args.comparability_note,
+                              related_task_ids=args.related_task_ids, next_action=args.next_action,
+                              task_context=args.task_context)
+    elif args.command == "result-progress":
+        from mining_research_kernel.result_comparison import result_comparison_progress
+        source_paths = (json.loads(Path(args.source_paths_file).read_text(encoding="utf-8-sig"))
+                        if args.source_paths_file else None)
+        out = result_comparison_progress(args.project_root, task_id=args.task_id, source_paths=source_paths)
+    elif args.command == "result-report":
+        from mining_research_kernel.result_comparison import render_result_comparison_report
+        markdown = render_result_comparison_report(args.project_root, task_id=args.task_id)
+        if args.output is None:
+            print(markdown, end="" if markdown.endswith("\n") else "\n")
+            return 0
+        target, digest = _write_research_report(args.project_root, args.task_id, args.output, markdown)
+        out = {"type": "ResultComparisonReportReceipt", "task_id": args.task_id, "output": target,
                "sha256": digest, "authority": "derived", "source_queries_performed": False,
                "run_created": False, "verification_created": False}
     elif args.command in {"research-begin", "research-continue"}:
