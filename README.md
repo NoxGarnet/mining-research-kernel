@@ -1,33 +1,35 @@
-# Mining Research Kernel
+# Mining Research Kernel · 矿业研究内核
 
-A filesystem-native workspace and optional research kernel for Agent-assisted
-mining research. Start with a small Markdown workspace, then enable durable
-research records and domain workflows when the task needs them. Runtime and
-offline examples use the Python standard library.
+**简体中文** | [English](README.en.md)
 
-## Start or continue a project
+语言链接用于切换本项目的介绍页。详细指南目前以英文为主，部分示例使用中文。
 
-- [Start a lightweight workspace](docs/START_WORKSPACE.md): create the three-file entry and continue from a real research question.
-- [Bring an existing project](docs/EXISTING_PROJECT.md): keep its files in place, add only a missing entry, and hand off a bounded task.
-- [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
-- [Optionally keep research records](docs/OPTIONAL_RESEARCH.md): enable an existing project, record a local documentation query, and recover its evidence and limits.
-- [Continue one research question](docs/CONTINUING_RESEARCH.md): let the Agent recover a prior judgment, add selected readings and generate a readable report with changes and gaps.
-- [Read documentation passages](docs/ITASCA_READING.md): read registered official HTML sections or query an existing Itasca MCP documentation connection, preserving their different provenance.
-- [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
-- [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
+一个基于本地文件的轻量工作区与可选研究内核，用于协助 Agent 开展矿业研究。
+先用少量 Markdown 文件组织项目；需要时，再启用持久研究记录和领域工作流。
+运行时与离线示例使用 Python 标准库。
 
-Give your Agent the question and material locations, for example:
-"比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。"
-The Agent can follow the relevant guide and enable the needed records or source
-connection within the agreed task. The same small workspace remains the entry.
+## 开始或接续项目
 
-To try continued reading without a library connection or an existing model, use
-the [two-session synthetic research example](examples/continuing_research/README.md).
-It preserves the first judgment, adds a selected reading under the same question,
-and demonstrates recovery and a generated report. Its paper passages and
-interpretations are authored teaching material.
+- [建立轻量工作区](docs/START_WORKSPACE.md)：创建三个入口文件，从一个实际研究问题开始。
+- [接入已有项目](docs/EXISTING_PROJECT.md)：保留资料原有位置，只补齐必要入口，明确本次协助任务。
+- [接续已有项目](docs/PROJECT_CONTEXT.md)：查找项目入口、判断和资料位置，无需先创建任务或读取原始材料。
+- [按需启用研究记录](docs/OPTIONAL_RESEARCH.md)：为已有项目增加持久记录，保存本地资料查询的依据和限制。
+- [围绕同一问题持续研究](docs/CONTINUING_RESEARCH.md)：恢复原判断，补读选定材料，生成包含变化与缺口的报告。
+- [阅读软件文档段落](docs/ITASCA_READING.md)：读取已登记的官方本地 HTML，或查询已有 Itasca MCP 文档连接，并保留不同来源的出处。
+- [围绕问题比较文献](docs/LITERATURE_COMPARISON.md)：按选定维度比较论文与可选软件说明，保留页码引用和缺失信息。
+- [FLAC3D 核查工作流](docs/FLAC3D_FIRST_TASK.md)：定位输入、确认软件版本、查阅适用的官方说明，并保存可接续的核查结果。
 
-Example (PowerShell):
+可以直接告诉 Agent 你的问题和材料位置，例如：
+
+> 比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。
+
+Agent 按对应指南，在约定范围内启用需要的记录或资料连接。项目仍以原来的轻量入口为起点。
+
+没有资料库连接或现有模型时，可以先运行[两次会话的合成研究示例](examples/continuing_research/README.md)。
+示例保留首轮判断，再围绕同一问题补充阅读，演示进度恢复和报告生成。
+其中的论文页面与解释均为编写的教学材料。
+
+PowerShell 示例：
 
 ```powershell
 $starterRoot = 'D:\replace-with-user-chosen\mining'
@@ -35,228 +37,153 @@ python -B -X utf8 .\mining_kernel.py init-workspace $starterRoot --project-id ro
 python -B -X utf8 .\mining_kernel.py workspace-context --workspace-root $starterRoot
 ```
 
-Replace the example with a new or empty directory you choose outside this code
-repository. Keep research inputs and generated project files there.
+请把示例路径替换为你选定的、代码仓库外的新目录或空目录。
+研究输入与生成的项目文件保存在自己的项目目录中。
 
-The lightweight entry does not configure a model, create a ledger or claim
-that FLAC3D/PFC/AE or any registered external tool is installed or available.
-Software versions, inputs and checks remain unknown until confirmed.
+轻量入口不会配置模型或创建运行账本，也不能证明 FLAC3D、PFC、AE 或其他外部工具已经安装并可用。
+软件版本、输入和核查状态需要实际确认。
 
-For a worked, read-only example, open the [anonymous FLAC3D review](examples/flac3d_review/README.md).
-It demonstrates project entry, a limited source-backed review, and handoff;
-its teaching script is not an engineering model or a solver result.
+也可以查看[匿名 FLAC3D 只读核查示例](examples/flac3d_review/README.md)，了解项目入口、有限范围的来源核查和交接方式。
+其中的教学脚本不是工程模型，也不是求解结果。
 
-## Why this exists
+## 为什么做这个项目
 
-Research automation needs a boundary between authoritative material, derived
-artifacts, and claims about verification. This project makes that boundary
-explicit. It discovers compatible workspaces and reports evidence; it does not
-silently rewrite research files or turn metadata into experimental conclusions.
+研究自动化需要区分原始资料、派生产物和验证结论。本项目把这些边界写入记录与操作流程，
+发现兼容工作区、报告依据，并保留可恢复的研究状态。
+它不会把元数据当成实验结论，也不会静默改写研究文件。
 
-This is an early foundation for different Agents to call during mining
-research. It keeps the research question, routes, evidence, failures and
-recoverable records outside the chat window. FLAC3D is the first domain entry:
-the kernel can route a project to version-matched documentation and record what
-is known, missing or blocked. It is a research record and recovery kernel, not
-an autonomous research system or a substitute for FLAC3D, Zotero or an
-engineering reviewer.
+这是供不同 Agent 调用的早期矿业研究基础设施，把研究问题、任务路线、证据、失败和接续记录保存在对话之外。
+FLAC3D 是当前首个领域入口：根据项目版本选择适用文档，记录已知、缺失和受阻的条件。
+研究解释与工程判断仍需要相应的阅读、审查和验证，不能由记录完成状态替代。
 
-## Research kernel mechanism demonstration
+## 内核机制示例
 
-The [offline synthetic workflow](docs/R5_QUICKSTART.md) demonstrates task,
-evidence, recovery and record mechanics with fixtures. Its execution is
-synthetic; it is not a real FLAC3D, PFC, or AE task.
+[离线合成工作流](docs/R5_QUICKSTART.md)用固定样例演示任务、证据、恢复和记录机制。
+其中的执行是合成演示，不是真实 FLAC3D、PFC 或 AE 任务。
 
-Then choose the task you actually need:
+按实际需要选择入口：
 
-- [Find project entries, saved judgments and material locations without creating a task](docs/PROJECT_CONTEXT.md).
-- [Check an FLAC3D command name against applicable official documentation](docs/R1_DOCUMENTATION.md).
-- [Record a task, evidence and bounded run](docs/R2_QUICKSTART.md).
-- [Compare limited routes and preserve failures](docs/R3_QUICKSTART.md).
-- [Review Cognition proposals and recover related failures](docs/R4_QUICKSTART.md).
-- [Inspect the public acceptance boundary](docs/ACCEPTANCE_SUMMARY.md).
+- [查找项目入口、已保存判断和材料位置](docs/PROJECT_CONTEXT.md)。
+- [对照适用官方文档核查 FLAC3D 命令名称](docs/R1_DOCUMENTATION.md)。
+- [记录任务、证据和有限范围运行](docs/R2_QUICKSTART.md)。
+- [比较有限任务路线并保留失败](docs/R3_QUICKSTART.md)。
+- [审查 Cognition 提案并恢复相关失败信息](docs/R4_QUICKSTART.md)。
+- [了解公开验收范围](docs/ACCEPTANCE_SUMMARY.md)。
 
-The R0–R8 labels are historical implementation and acceptance stages. They are
-kept in [completion status](docs/COMPLETION_STATUS.md), rather than serving as
-the user's task navigation.
+R0–R8 是历史实现与验收阶段的名称，保留在[完成状态](docs/COMPLETION_STATUS.md)中。
+日常使用可以直接从任务指南进入。
 
-## Repository layout
+## 仓库目录
 
-The lightweight guides above are the user entry. Contributors can inspect
-[mining_kernel.py](mining_kernel.py), the CLI entry point. Users do not need
-to read every directory to start a project.
+用户从上面的指南开始即可。开发者可查看 CLI 入口 [mining_kernel.py](mining_kernel.py)。
 
-| Path | Purpose |
+| 路径 | 用途 |
 |---|---|
-| [docs/](docs/) | Usage guides, contracts, limitations and acceptance summaries. |
-| [examples/](examples/) | Runnable examples and synthetic workspaces for learning the API. |
-| [mining_research_kernel/](mining_research_kernel/) | Task, route, research record and Cognition services. |
-| [workflows/](workflows/) | Domain-specific task routes and capability declarations. |
-| [adapters/](adapters/) | Project and source discovery/inspection integrations. |
-| [providers/](providers/) | Documentation and execution provider implementations, including disabled and synthetic execution. |
-| [schemas/](schemas/) | JSON contracts for requests, records and derived views. |
-| [tests/](tests/) | Automated checks for kernel behavior; mainly for contributors. |
-| [fixtures/](fixtures/) | Fixed synthetic sample data used by tests; these are not private research files. |
+| [docs/](docs/) | 使用指南、接口约定、限制和验收说明。 |
+| [examples/](examples/) | 可运行示例与合成工作区。 |
+| [mining_research_kernel/](mining_research_kernel/) | 任务、路线、研究记录和 Cognition 服务。 |
+| [workflows/](workflows/) | 领域工作流与能力声明。 |
+| [adapters/](adapters/) | 项目和资料来源的发现、检查适配器。 |
+| [providers/](providers/) | 文档与执行提供方，包括停用的执行边界和合成执行。 |
+| [schemas/](schemas/) | 请求、记录与派生视图的 JSON 接口约定。 |
+| [tests/](tests/) | 面向开发者的自动检查。 |
+| [fixtures/](fixtures/) | 测试使用的固定合成材料，不含私人研究文件。 |
 
-Other top-level Python files provide CLI support, project setup, extension
-registration, Run Ledger and Zotero snapshot utilities. The repository includes
-development and test material as well as runtime code; running a normal research
-task does not require running the test suite. Keep your own research inputs and
-generated records in a separate project directory.
+其他顶层 Python 文件提供 CLI 支持、项目初始化、扩展注册、Run Ledger 和 Zotero 快照工具。
+普通研究任务不要求运行测试套件；请把自己的研究输入与生成记录放在独立项目目录。
 
-## Agent and Kernel roles
+## Agent 与内核的分工
 
-The Agent reads the question and available material, explains alternatives,
-selects a bounded action and presents an interpretation. The Kernel validates
-the request, records the Task/Route/Claim/Evidence/Run/Verification chain,
-enforces applicable gates and budgets, preserves failures and exposes state
-for a later process. Agents call it through the CLI or public Python API;
-models, Host applications and user-provided resources remain outside the
-repository.
+Agent 阅读问题和材料，解释备选方案，选择有明确范围的操作，并提出解释。
+内核校验请求，记录 Task / Route / Claim / Evidence / Run / Verification 关联，
+执行相应检查关卡与预算约束，保留失败，并向后续进程提供可恢复状态。
+Agent 通过 CLI 或公开 Python API 调用内核；模型、宿主应用与用户资料位于仓库之外。
 
-A completed task or Run means that the declared workflow scope completed. It
-does not establish that a hypothesis is true or that an engineering design is
-fit for use. Model and session identifiers support provenance and comparison;
-they do not create authority, and changing models or sessions is not by itself
-an independent review.
+任务或 Run 完成，只表示声明的工作范围完成，不能证明研究假设为真或工程方案适用。
+模型和会话标识可用于记录来源与比较；更换模型或会话本身不构成独立审查。
 
-## Current capabilities
+## 当前能力
 
-- Continued source review under one ResearchQuestion, retaining prior task and
-  judgment revisions, with read-only progress and regenerable Markdown reports;
-  see the [continuing research guide](docs/CONTINUING_RESEARCH.md).
-- Compact recovery distinguishes a pending continuation from its inherited
-  historical judgment. Exact saved revisions remain expandable, and compatible
-  source-review tasks expose progress and report entry points.
-- Direct bounded Zotero search/page reading, cited source synthesis, and recovery;
-  see the [research source workflow](docs/RESEARCH_SOURCES.md).
-- Bounded official local HTML passage reading and documentation-only Itasca MCP
-  queries through an explicit Host registration. MCP corpus content remains a
-  derived reading source; see [documentation reading](docs/ITASCA_READING.md).
-- Question-oriented comparison of distinct papers across selected dimensions,
-  with citations constrained to captured pages and provisional applicability
-  judgments; see [literature comparison](docs/LITERATURE_COMPARISON.md).
-- Portable blank FLAC3D project initialization and configuration-driven discovery.
-- Two read-only project adapters for a compatible mining-research workspace.
-- An explicit local HTML documentation check with source/version binding and
-  command-name-only coverage; see the [documentation guide](docs/R1_DOCUMENTATION.md).
-- The FLAC3D `static_check` gate is declared and enforced, but its real
-  implementation is not included: a production `static_check` task is blocked
-  with `static_check_unimplemented`. The synthetic fixture path remains usable.
-- Task packets, persisted TaskState, bounded synthetic fake execution,
-  RunReference/Verification records, Zotero-backed synthetic evidence and
-  deterministic Research Map rebuild; see the [task and evidence guide](docs/R2_QUICKSTART.md).
-- Bounded multi-route exploration with per-route budgets, durable
-  reservations, write-set conflict blocking, parent/supersede relations and
-  deterministic comparison archives; see the [route guide](docs/R3_QUICKSTART.md).
-- File-native Core Cognition with mechanical evidence, bounded provisional
-  admission, dependency invalidation, scoped structured conflicts, a deduplicated
-  review queue and filtered failure recovery; see the [Cognition guide](docs/R4_QUICKSTART.md).
-- Fresh-user subprocess acceptance and a second-domain synthetic workflow
-  using the same TaskEngine, ResearchStore, Run Ledger, Verification and view
-  rebuild path; see the [fresh-user guide](docs/R5_QUICKSTART.md).
-- A persisted `task-complete` operation for closing a declared research scope
-  after current Route, RunReference/Run, Verification, output, and Evidence
-  records pass their association checks.
-- A static `kind=source` Zotero adapter with only `discover`, `inspect`, and
-  `read_only` capabilities.
-- Sanitized Zotero snapshot validation and collection/item/attachment
-  relation summaries.
-- Optional normalized DOI matching before title/author fallback in
-  `relation_map.py`.
-- A filesystem-native five-stage Run Ledger with deterministic validation and
-  stability diagnostics.
-- A bounded local-material registration entry point that creates hashed
-  Asset/Evidence records without copying source bytes; primary/original,
-  project_record and derived_reading_note are kept distinct.
-- An explicit read-only evidence-review task that links registered Asset and
-  Evidence records into TaskPacket reads, detects project-relative source drift,
-  and keeps reading and verification statuses separate from registration.
-- A read-only compact `resume` view and targeted `show` expansion for persisted
-  research state; the complete `task-inspect` TaskPacket remains available.
-- Opt-in neutral project configuration for the same ResearchStore and a
-  read-only evidence-review workflow, preserving existing files and legacy projects.
-- An explicit `documentation-record` operation that queries the registered
-  local HTML provider and atomically links a bounded observation to a question,
-  derived snapshot, evidence and provisional Decision; it creates no solver Run.
-- A bounded incremental judgment update that inherits existing material reads,
-  checks Decision revisions and Evidence references, and preserves prior
-  Decisions without creating execution or Verification records.
-- A fully synthetic workspace example that runs without third-party packages;
-  the complete test suite and schema checks require `jsonschema`.
+- 在同一个 ResearchQuestion 下接续资料研究，保留历史任务和判断修订，提供只读进度恢复及可重建的 Markdown 报告；见[持续研究指南](docs/CONTINUING_RESEARCH.md)。
+- 简短恢复视图区分待分析任务与继承的历史判断，可展开准确历史版本，并为兼容的资料研究任务提供进展和报告入口。
+- 在明确范围内检索 Zotero、读取选定页面、综合带引用的资料并恢复研究；见[资料研究工作流](docs/RESEARCH_SOURCES.md)。
+- 通过明确的宿主登记读取官方本地 HTML 段落，或查询仅用于文档的 Itasca MCP。MCP 语料内容保留为派生阅读来源；见[文档阅读](docs/ITASCA_READING.md)。
+- 围绕问题按选定维度比较不同论文，引用限制在已保存阅读页面内，适用性判断保持暂定；见[文献比较](docs/LITERATURE_COMPARISON.md)。
+- 可移植的空白 FLAC3D 项目初始化与配置驱动的发现机制。
+- 两个面向兼容矿业研究工作区的只读项目适配器。
+- 明确绑定来源与版本的本地 HTML 命令名称检查；见[文档核查指南](docs/R1_DOCUMENTATION.md)。
+- 声明并执行 FLAC3D `static_check` 关卡约束；真实实现尚未提供，生产任务以 `static_check_unimplemented` 阻塞，合成测试路径仍可使用。
+- TaskPacket、持久 TaskState、有限合成执行、RunReference / Verification 记录、Zotero 合成证据与确定性 Research Map 重建；见[任务与证据指南](docs/R2_QUICKSTART.md)。
+- 有限多路线探索，包括每条路线的预算、持久预留、写入集合冲突阻塞、父级与替代关系及确定性比较归档；见[路线指南](docs/R3_QUICKSTART.md)。
+- 基于文件的 Core Cognition，包括可程序核查的证据、有限暂定采纳、依赖失效、限定范围的结构化冲突、去重审查队列和过滤后的失败恢复；见[Cognition 指南](docs/R4_QUICKSTART.md)。
+- 新用户子进程验收和第二领域的合成工作流，复用 TaskEngine、ResearchStore、Run Ledger、Verification 与视图重建；见[新用户指南](docs/R5_QUICKSTART.md)。
+- 持久化的 `task-complete` 操作，在当前 Route、RunReference / Run、Verification、输出和 Evidence 记录通过关联检查后，关闭声明的任务范围。
+- 仅具备 `discover`、`inspect` 和 `read_only` 能力的静态 `kind=source` Zotero 适配器。
+- 脱敏 Zotero 快照校验，以及集合、条目、附件的关系摘要。
+- `relation_map.py` 优先使用规范化 DOI 匹配，再回退到标题和作者匹配。
+- 基于文件的五阶段 Run Ledger，提供确定性校验和稳定性诊断。
+- 有明确范围的本地材料登记：计算哈希并创建 Asset / Evidence 记录，不复制来源字节，区分原始材料、项目记录和派生阅读笔记。
+- 只读证据审查任务：将登记的 Asset / Evidence 关联到 TaskPacket 阅读，检测项目内来源变化，并区分登记、阅读与验证状态。
+- 面向持久状态的简短只读 `resume` 视图和定向 `show` 展开，同时保留完整 `task-inspect` TaskPacket。
+- 可选的中性项目配置，复用同一个 ResearchStore 和只读证据审查工作流，保留现有文件与旧项目兼容性。
+- 明确的 `documentation-record` 操作：查询已登记的本地 HTML，并以原子操作关联研究问题、派生快照、证据与暂定 Decision，不创建求解器 Run。
+- 有明确范围的增量判断更新：继承已有材料阅读，检查 Decision 修订和 Evidence 引用，保留旧 Decision，不创建执行或 Verification 记录。
+- 不依赖第三方包的完整合成工作区示例；完整测试与 schema 检查需要 `jsonschema`。
 
-The expanded v0.1.0 route and cognition loop is implemented through R5 in the
-current working tree. See [completion status](docs/COMPLETION_STATUS.md) for
-accepted stages and limits.
-The kernel mechanisms listed above are real filesystem and record operations;
-they are not fake results. Synthetic execution and static checking are fixture
-implementations for demonstration and do not establish FLAC3D behavior. A
-production user of the command-name check must provide an applicable Itasca
-local documentation source registration. That check is version-bound and
-limited to `command_name_only`; it does not establish parameters, scripts,
-numerical validity or engineering suitability. Production FLAC3D `static_check`
-and live Itasca execution remain unimplemented.
+扩展的 v0.1.0 路线与认知循环已实现至 R5。具体已验收阶段和限制见[完成状态](docs/COMPLETION_STATUS.md)。
+上述内核机制是真实的文件与记录操作。合成执行和合成静态检查用于演示，不能证明 FLAC3D 行为。
+生产环境中的命令名称检查需要用户提供适用的 Itasca 本地文档登记，范围限定为 `command_name_only`，
+不验证参数、完整脚本、数值有效性或工程适用性。生产 FLAC3D 静态检查与真实执行尚未实现。
 
-The optional external `itasca-mcp` documentation connection uses a Host-selected
-existing stdio runtime. It calls only documentation search/browse tools, without
-an engine bridge or model execution. This repository does not bundle that
-runtime. Community corpus output does not independently authenticate an
-official page or its exact build. Execution integration remains separate work.
+可选外部 `itasca-mcp` 文档连接使用宿主选择的已有 stdio 运行时，只调用文档检索和浏览工具。
+本仓库不包含该运行时，也不通过此连接执行模型或连接引擎桥。
+社区语料输出不能独立证明官方页面身份或精确构建版本；执行连接属于单独的后续工作。
 
-## Capability classification
+## 能力分类
 
-| Classification | Included behavior |
+| 分类 | 范围 |
 |---|---|
-| Real kernel mechanisms | ResearchStore, TaskState, routes, Run Ledger, Evidence/Verification, Research Map, Cognition views and completion checks. |
-| Synthetic | Fixture projects, deterministic fake execution and synthetic static checking. |
-| User-provided resources | Version-matched Itasca local documentation and registration; an existing Itasca documentation MCP runtime; sanitized Zotero snapshots, a caller-injected read-only reader, or an existing Zotero stdio runtime selected through an explicit Host registration. |
-| Unimplemented | Production FLAC3D `static_check`, real FLAC3D execution and Itasca execution integration. |
+| 已实现的内核机制 | ResearchStore、TaskState、路线、Run Ledger、Evidence / Verification、Research Map、Cognition 视图与完成条件检查。 |
+| 合成演示 | 固定样例项目、确定性的模拟执行与合成静态检查。 |
+| 用户提供的资源 | 版本适用的 Itasca 本地文档及登记、已有 Itasca 文档 MCP 运行时、脱敏 Zotero 快照、调用方注入的只读读取器，或经宿主登记选择的已有 Zotero stdio 运行时。 |
+| 尚未实现 | 生产 FLAC3D `static_check`、真实 FLAC3D 执行和 Itasca 执行连接。 |
 
-The [public acceptance summary](docs/ACCEPTANCE_SUMMARY.md) records the
-versioned code baseline and separates these categories from validation claims.
+[公开验收摘要](docs/ACCEPTANCE_SUMMARY.md)记录了对应版本的代码基线，并区分这些能力与验证结论。
 
-## Cognition and research authority
+## Cognition 与研究依据
 
-Core Cognition is a rebuildable view over persisted observations, proposals,
-failures and relations. A narrow allowlist of located mechanical facts may be
-admitted as `provisional`; an Agent's requested status, role label or free-text
-explanation cannot promote it. Other interpretations remain proposals until a
-trusted Host review supplies the required evidence, scope and decision. The
-CLI does not provide a complete promotion workflow, and the system does not
-promise autonomous understanding or self-evolution. Failed, contested, stale
-and missing-evidence states remain valuable records and can block only the
-related work.
+Core Cognition 是对持久观察、提案、失败和关系的可重建视图。
+只有白名单内、具有定位依据的少数可程序核查事实，才可被暂定采纳为 `provisional`。
+Agent 申请的状态、角色名称或自由文本解释不能自行提升结论地位。
+其他解释仍是提案，直到受信宿主审查提供所需证据、范围和决定。
 
-## Environment and dependencies
+CLI 尚未提供完整的状态提升流程；系统不承诺自主理解或自我进化。
+失败、有争议、过期和缺少依据的状态都会保留，并仅对相关工作形成约束。
 
-Python 3.14.2 on Windows is the only interpreter environment exercised for
-this candidate. No lower or upper Python support bound is claimed here; other
-versions require separate verification.
+## 环境与依赖
 
-The runtime-only path does not import the test schema validator and can be
-checked with an isolated interpreter:
+本候选已在 Windows / Python 3.14.2 环境验证；未承诺更低或更高 Python 版本的兼容范围，其他版本需要另行核验。
+
+仅运行时的路径不会导入测试用的 schema 校验器，可以用隔离解释器检查：
 
 ```powershell
 python -S -B mining_kernel.py --workspace examples/synthetic_workspace discover
 python -S -B mining_kernel.py --workspace examples/synthetic_workspace validate
 ```
 
-The complete tests include direct `jsonschema` imports for Draft 2020-12
-validation. Prepare that dependency with the interpreter you will use:
+完整测试会直接导入 `jsonschema`，执行 Draft 2020-12 校验。使用将运行测试的 Python 准备依赖：
 
 ```powershell
 python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -v
 ```
 
-This repository does not silently skip schema tests when `jsonschema` is
-missing. Schema-file parsing, runtime output validation and scientific or
-engineering validity are separate claims. This round did not install the
-dependency.
+缺少 `jsonschema` 时，仓库不会静默跳过 schema 测试。
+schema 文件解析、运行时输出校验与科学或工程有效性是不同层面的检查；本轮文档改动未安装依赖。
 
-## Quick start
+## 快速体验
 
-From this repository root:
+从仓库根目录运行：
 
 ```powershell
 python mining_kernel.py --workspace examples/synthetic_workspace discover
@@ -266,28 +193,23 @@ python mining_kernel.py --workspace examples/synthetic_workspace inspect-source 
 python mining_kernel.py --workspace examples/synthetic_workspace validate
 ```
 
-The last source inspection intentionally reports `CANNOT_VERIFY` because no
-external Zotero reader is supplied by the example. A compatible application
-may inject a reader for one allowed operation.
+最后一条来源检查预期返回 `CANNOT_VERIFY`，因为示例没有提供外部 Zotero 读取器。
+兼容宿主应用可针对一项允许操作注入读取器。
 
-Release notes for the published version are in [RELEASE_NOTES.md](RELEASE_NOTES.md)
-and on the [v0.1.0 GitHub Release](https://github.com/NoxGarnet/mining-research-kernel/releases/tag/v0.1.0).
-The pre-publication candidate draft is archived in
-[docs/archive/v0.1.0-release-candidate.md](docs/archive/v0.1.0-release-candidate.md).
+已发布版本说明见 [RELEASE_NOTES.md](RELEASE_NOTES.md) 和 [v0.1.0 GitHub Release](https://github.com/NoxGarnet/mining-research-kernel/releases/tag/v0.1.0)。
+发布前的候选草稿归档于 [docs/archive/v0.1.0-release-candidate.md](docs/archive/v0.1.0-release-candidate.md)。
 
-## Developer validation
+## 开发者验证
 
-After preparing `requirements-test.txt`, run the complete test suite from the
-repository root:
+准备 `requirements-test.txt` 中的依赖后，在仓库根目录运行完整测试：
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-This is a development check with a third-party schema validator. It is kept
-separate from the standard-library runtime examples above.
+这是使用第三方 schema 校验器的开发检查，与上面的标准库运行示例分开。
 
-For an empty user-owned project directory:
+针对用户选定的空项目目录：
 
 ```powershell
 python mining_kernel.py init-flac3d-project path/to/new-project --project-id demo_project
@@ -295,96 +217,69 @@ python mining_kernel.py --workspace path/to/new-project discover
 python mining_kernel.py documentation-check --help
 ```
 
-The initializer refuses non-empty directories. Configure the project's actual
-version and inputs before use; the empty baseline is not a ready model. The
-documentation command requires a separate, explicitly selected Host source
-registration described in the guide. It never treats a metadata index or
-injected callback as sufficient official evidence.
+初始化器拒绝非空目录。使用前请配置项目实际版本和输入；空白基线不是可直接计算的模型。
+文档命令需要指南中说明的独立、明确选择的宿主来源登记，不把元数据索引或注入回调当作充分的官方依据。
 
-For the complete synthetic task, evidence and rebuild loop, follow the
-[R5 quick start](docs/R5_QUICKSTART.md). A second domain can use the shared
-kernel through a separate portable fixture project:
+完整的合成任务、证据和重建流程见 [R5 快速入门](docs/R5_QUICKSTART.md)。
+第二领域可以通过独立、可移植的合成项目复用内核：
 
 ```powershell
 python mining_kernel.py init-synthetic-project path/to/synthetic-project --project-id synthetic_demo
 ```
 
-Synthetic execution and synthetic static checking are deterministic fixture
-implementations. They do not run FLAC3D or validate numerical or engineering
-behavior. They also do not bundle or activate `itasca-mcp`. Production FLAC3D `static_check` remains an
-applicable pending gate and is blocked until a real implementation is provided
-or registered.
+合成执行与合成静态检查是确定性样例，不运行 FLAC3D、不验证数值或工程行为，也不包含或启用 `itasca-mcp`。
+生产 FLAC3D `static_check` 仍是适用但待完成的关卡，真实实现提供或登记前保持阻塞。
 
-To persist completion for an existing task, provide every route in its packet
-and the current records that prove each route is done. This is an independent
-operation, not an automatic final step of the synthetic fixture example; the
-IDs below must come from existing records inspected in that project and must
-not be invented:
+若要持久记录已有任务完成，需要提供其 TaskPacket 内每条路线及证明其完成的当前记录。
+这是独立操作，不是合成示例的自动收尾步骤。下面的 ID 必须来自该项目中实际检查过的记录，不能编造：
 
 ```powershell
 python mining_kernel.py task-complete --project-root path/to/project task-id `
   --operation-id complete-1 --completion-json '@completion.json'
 ```
 
-The completion JSON must contain `route_ids`, `run_reference_ids`,
-`verification_ids`, `verification_gate_coverage`, `evidence_refs`, and
-`output_refs`, keyed by route where appropriate. `verification_gate_coverage`
-must list every currently applicable TaskPacket gate for every route and map
-each gate to the Verification record IDs that cover it. The `verification_ids`
-list for a route must be exactly the union of those coverage lists. The
-coverage entry's `verification_gate_id` is a redundant copy of the current
-Verification `gate_id`; both must equal the packet gate key.
-operation checks the current Route/RunReference/Run, Verification,
-ResearchStore relationships, and Run Ledger before appending a TaskState
-revision. A later current PASS/PASS_WITH_NOTES Verification may resolve an
-earlier pending or failed gate when its record and relation prove the declared
-coverage. It rejects incomplete or unrelated evidence and never changes
-cognition or upgrades command-name-only, numerical, physical, or engineering
-verification.
+完成请求 JSON 必须包含 `route_ids`、`run_reference_ids`、`verification_ids`、
+`verification_gate_coverage`、`evidence_refs` 和 `output_refs`，适用时按路线组织。
+`verification_gate_coverage` 须逐条列出当前适用的 TaskPacket 关卡，并映射到相应 Verification ID；
+每条路线的 `verification_ids` 必须与这些覆盖项的引用并集完全一致。
+覆盖项中的 `verification_gate_id` 是当前 Verification `gate_id` 的冗余副本，两者都必须等于 TaskPacket 的关卡键。
 
-For snapshot-only workflows:
+操作会先检查当前 Route / RunReference / Run、Verification、ResearchStore 关系与 Run Ledger，再追加 TaskState 修订。
+后续有效的 `PASS` / `PASS_WITH_NOTES` Verification 可在记录和关系足以证明覆盖时，解决此前待定或失败的关卡。
+操作拒绝不完整或无关依据，不会改变 Cognition，也不会将命令名称检查提升为数值、物理或工程验证。
+
+仅处理快照时：
 
 ```powershell
 python mining_kernel.py validate-zotero-snapshot path/to/snapshot.json
 python mining_kernel.py inspect-zotero-snapshot path/to/snapshot.json
 ```
 
-For an explicitly selected local file, register only the material you are
-authorized to use:
+明确选择本地文件时，只登记获准使用的材料：
 
 ```powershell
 python mining_kernel.py register-local-material --project-root path/to/project path/to/decision.md --material-kind project_record --source-documents-claim claim-id
 python mining_kernel.py register-local-material --project-root path/to/project path/to/reading-card.md --material-kind derived_reading_note
 ```
 
-The command reads the file to calculate its SHA-256 and writes only Asset,
-Evidence and provenance records; it never copies or edits the source. The
-material kind fixes its authority mapping: a derived reading note remains
-`authority=derived` even when a caller supplies a stronger label. A relative
-path must stay inside the project; an external file requires an explicit
-absolute caller path and is persisted as a caller label rather than an
-absolute path. This records provenance, not scientific, numerical or
-engineering validity. Repeating the exact request is idempotent; changing its
-citation or claim metadata is an explicit operation conflict.
+命令读取文件以计算 SHA-256，只写入 Asset、Evidence 与来源记录，不复制或编辑原文件。
+材料种类决定其权威属性：派生笔记始终保留 `authority=derived`，调用方提供更强标签也不会改变这一点。
+相对路径必须位于项目内部；外部文件须明确提供绝对调用路径，持久记录保存调用方标签，不保存绝对路径。
+这些记录描述来源，不证明科学、数值或工程有效性。完全相同的请求可幂等重放，修改引用或 Claim 元数据则构成明确的操作冲突。
 
-## Workspace contract
+## 工作区约定
 
-The `--workspace` argument points to a user-owned compatible workspace. The
-current project adapters expect relative paths under that root, including a
-small `Workspace_Index/project_index.yaml` navigation file and the project
-paths represented by the adapters. The repository ships only a synthetic
-version of that layout; it does not ship a private workspace or research
-documents.
+`--workspace` 指向用户自己的兼容工作区。
+当前项目适配器预期在该根目录下使用相对路径，包括小型导航文件 `Workspace_Index/project_index.yaml` 及适配器对应的项目路径。
+仓库只提供该布局的合成版本，不包含私人工作区或研究材料。
 
-## Zotero read-only boundary
+## Zotero 只读边界
 
-The Zotero integration is deliberately a source read path, not a write
-provider. The adapter contains no CREATE, UPDATE, DELETE, or MERGE operation
-and holds no MCP credentials. A sanitized snapshot is a local input artifact;
-a real-time reader is a separate caller-injected capability. Missing or failed
-readers degrade to explicit diagnostics.
+Zotero 集成提供资料读取能力，不提供写入能力。
+适配器不含 CREATE、UPDATE、DELETE 或 MERGE 操作，也不保存 MCP 凭据。
+脱敏快照是本地输入，实时读取器是由调用方另行提供的能力；读取器缺失或失败时返回明确诊断。
 
-The allowed operations are:
+允许的操作为：
 
 ```text
 zotero_get_collections
@@ -396,48 +291,33 @@ zotero_search_items
 zotero_read_pdf_pages
 ```
 
-The [research source workflow](docs/RESEARCH_SOURCES.md) provides direct
-`zotero-search` / `zotero-read` commands for an explicit Host stdio connection,
-then `research-start` / `research-review` to compare selected literature and
-documentation observations using a cited Markdown note. It reuses existing
-research records and keeps source coverage separate from research conclusions.
+[资料研究工作流](docs/RESEARCH_SOURCES.md)通过明确登记的宿主 stdio 连接提供 `zotero-search` / `zotero-read`，
+再用 `research-start` / `research-review` 对选定文献和文档观察形成带引用的 Markdown 分析。
+它复用既有研究记录，区分资料覆盖范围与研究结论。
 
-The [Zotero reading workflow](docs/ZOTERO_READING.md) adds bounded external
-metadata/page captures and explicit writeback into optional research records.
-`zotero-record` imports a capture with source identity, versions, page coverage,
-and optional interpretations; it does not contact Zotero or certify a fresh
-source check. The external reader remains a Host-provided capability. See the
-[offline synthetic example](examples/zotero_reading/README.md).
+[Zotero 阅读工作流](docs/ZOTERO_READING.md)提供限定范围的外部元数据、页面读取结果及其向可选研究记录的明确写回。
+`zotero-record` 导入来源身份、版本、页面覆盖和可选解释，不连接 Zotero，也不能证明来源刚被重新核验。
+外部读取器仍由宿主提供；参见[离线合成示例](examples/zotero_reading/README.md)。
 
-Original PDFs and other primary sources remain authoritative. Zotero metadata,
-snapshots, OCR, Markdown, and MCP responses are rebuildable relation or
-reading layers and must not be treated as experimental validation by
-themselves.
+原始 PDF 和其他一手来源保留原始资料地位。
+Zotero 元数据、快照、OCR、Markdown 和 MCP 响应是可重建的关联或阅读层，不能单独作为实验验证。
 
-Snapshot `doi` is optional. Exported DOI values are normalized to a lowercase
-bare DOI, and relation mapping uses DOI when available before falling back to
-title/author matching. DOI is metadata evidence; it does not prove source
-identity, page-level support, or scientific validity.
+快照中的 `doi` 可选。导出的 DOI 会规范化为小写、无前缀形式；关系映射优先使用 DOI，再回退到标题和作者匹配。
+DOI 属于元数据依据，不能证明来源身份、页面级支持或科学有效性。
 
-## Safety and limitations
+## 安全与限制
 
-- No Zotero credentials, library database, full-text body, private item keys,
-  or absolute attachment paths are included in this repository.
-- The public snapshot and workspace are synthetic and are not a full-library
-  example.
-- The Zotero adapter is not a gateway, background service, downloader, or
-  full-text index.
-- FLAC3D/Itasca software and other proprietary products are not distributed or
-  licensed by this repository.
-- Schema and API contracts are version 1 and may change in a future release.
+- 仓库不含 Zotero 凭据、资料库数据库、全文正文、私人条目键或附件绝对路径。
+- 公开快照与工作区是合成材料，不是整库示例。
+- Zotero 适配器不提供网关、后台服务、下载器或全文索引。
+- 仓库不分发 FLAC3D / Itasca 或其他专有软件，也不授予这些软件的许可。
+- Schema 与 API 接口约定为版本 1，未来版本可能调整。
 
-Future work such as a separately authorized Zotero Write Provider, automatic
-discovery/download, OpenAlex/OAResolver, Docling, PaperQA2, or serviceization
-is outside this release and requires a new scope and acceptance record.
+单独授权的 Zotero 写入提供方、自动发现或下载、OpenAlex / OAResolver、Docling、PaperQA2 和服务化等方向，
+不属于本次发布范围，需要另行明确工作范围和验收记录。
 
-## License
+## 许可证
 
-Mining Research Kernel is released under the Apache License 2.0. The license
-applies only to code and documentation this repository is authorized to
-publish. Zotero, FLAC3D/Itasca, and other third-party products retain their
-own licenses; none are bundled here.
+Mining Research Kernel 使用 Apache License 2.0。
+许可仅适用于本仓库有权发布的代码和文档。
+Zotero、FLAC3D / Itasca 及其他第三方产品保留各自许可，本仓库不包含这些产品。
