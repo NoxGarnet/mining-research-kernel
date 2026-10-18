@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-The language links switch this repository overview. Detailed guides are currently mostly in English; some examples are in Chinese.
+This overview and the workspace-start and continuing-research guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
 
 A filesystem-native workspace and optional research kernel for Agent-assisted
 mining research. Start with a small Markdown workspace, then enable durable
