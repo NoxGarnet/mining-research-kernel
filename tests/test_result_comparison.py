@@ -5,6 +5,7 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from mining_research_kernel.records import ResearchStore
@@ -100,6 +101,55 @@ class ResultComparisonTests(unittest.TestCase):
         self.assertEqual("INSUFFICIENT", point["status"])
         self.assertIsNone(point["delta"])
         self.assertIn("unit_mismatch", result["judgment"]["gaps"])
+
+    def test_solver_wording_tracks_caller_associated_bindings_and_preserves_replay(self):
+        base = self.capture("base-cap", self.baseline, "base")
+        candidate = self.capture("candidate-cap", self.candidate, "candidate")
+        from mining_research_kernel import result_comparison as module
+        original_find = module._find_capture
+        binding = {"run_ref_id": "fixture-run-ref", "association": "caller-supplied"}
+
+        for index, (bind_baseline, bind_candidate) in enumerate(
+                ((True, True), (True, False), (False, True), (False, False))):
+            task_id = f"binding-combo-{index}"
+            def find_capture(store, asset_ref, *, _bb=bind_baseline, _bc=bind_candidate):
+                asset, evidence = original_find(store, asset_ref)
+                payload = dict(asset["payload"])
+                should_bind = _bb if asset_ref == base["capture_asset_ref"] else _bc
+                if should_bind:
+                    payload["run_binding"] = binding
+                asset = {**asset, "payload": payload}
+                return asset, evidence
+
+            with self.subTest(baseline=bind_baseline, candidate=bind_candidate), patch.object(
+                    module, "_find_capture", side_effect=find_capture):
+                result = compare_results(self.project, task_id=task_id, question="Compare fixture exports",
+                    baseline_asset_ref=base["capture_asset_ref"],
+                    candidate_asset_ref=candidate["capture_asset_ref"], point_ids=["P1"])
+                bound = bind_baseline or bind_candidate
+                self.assertEqual(bound, "solver_not_run" not in result["judgment"]["gaps"])
+                self.assertEqual(bound, "comparison_operation_does_not_execute_solver" in result["judgment"]["gaps"])
+                if bound:
+                    self.assertIn("does not execute a solver", result["comparison"]["statement"])
+                    self.assertIn("do not authenticate CSV causality", result["comparison"]["statement"])
+                else:
+                    self.assertEqual("Existing exported data only; no solver was run and no engineering causality or physical comparability is verified.",
+                                     result["comparison"]["statement"])
+
+        # A legacy unbound result is returned byte-for-byte from its saved operation,
+        # even if the capture lookup would now expose a binding.
+        replay_id = "legacy-unbound"
+        with patch.object(module, "_find_capture", side_effect=lambda store, ref: original_find(store, ref)):
+            legacy = compare_results(self.project, task_id=replay_id, question="Legacy compare",
+                baseline_asset_ref=base["capture_asset_ref"],
+                candidate_asset_ref=candidate["capture_asset_ref"], point_ids=["P1"])
+        with patch.object(module, "_find_capture", side_effect=RuntimeError("must replay saved history")):
+            replay = compare_results(self.project, task_id=replay_id, question="Legacy compare",
+                baseline_asset_ref=base["capture_asset_ref"],
+                candidate_asset_ref=candidate["capture_asset_ref"], point_ids=["P1"])
+        self.assertTrue(replay["replayed"])
+        self.assertEqual(legacy["judgment"], replay["judgment"])
+        self.assertEqual(legacy["comparison"], replay["comparison"])
 
     def test_bad_requests_and_progress_source_hash_are_bounded(self):
         result = self.capture("base-cap", self.baseline, "base")

@@ -211,6 +211,14 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                     source = record.get("payload", {}).get("request", {}).get("observation", {}).get("source", {})
                     materials[-1]["title"] = _preview(source.get("title", ""))
                     materials[-1]["source_kind"] = source.get("source_kind")
+            elif (record["type"] == "RunReference" and record.get("plan_asset_ref")
+                  and record["id"].startswith("itasca.run.")):
+                tasks.append({"kind": "external_run", "id": rid, "revision": record["revision"],
+                              "run_id": record.get("run_id"), "state": record.get("status"),
+                              "scope_note": "saved external execution observations; live engine not queried",
+                              "show_argv": show,
+                              "progress_argv": _argv(root, "itasca-run-progress", "--run-id", record["run_id"]),
+                              "report_argv": _argv(root, "itasca-run-report", "--run-id", record["run_id"])})
             elif record["type"] == "Failure":
                 failures.append({"kind": "failure", "id": rid, "revision": record["revision"],
                                  "status": record.get("status"),

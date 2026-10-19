@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-This overview and the workspace-start, continuing-research, general-reading-observation, bounded FLAC3D script-review and existing-CSV result-comparison guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
+This overview and the workspace-start, continuing-research, general-reading-observation, bounded FLAC3D script-review, existing-CSV result-comparison and external-Itasca-observation guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
 
 A filesystem-native workspace and optional research kernel for Agent-assisted
 mining research. Start with a small Markdown workspace, then enable durable
@@ -22,6 +22,7 @@ offline examples use the Python standard library.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
 - [Bounded FLAC3D script review](docs/FLAC3D_SCRIPT_REVIEW.md): capture selected lines and a file hash, bind read official passages, and save cited findings; the first command family is `zone cmodel assign`.
 - [Compare existing CSV results](docs/RESULT_COMPARISON.md): capture declared units and conditions, compare explicitly selected points, link saved research context and recover a derived report.
+- [Record external Itasca task observations](docs/ITASCA_EXECUTION.md): preserve an Agent-run task's script digest, external status and bounded outputs, associate captured CSVs and recover reports.
 
 Give your Agent the question and material locations, for example:
 "比较这两篇文献已读部分的试验条件和方法，结合对应版本官方说明，记录依据、缺口和下一步建议。"
@@ -211,13 +212,17 @@ production user of the command-name check must provide an applicable Itasca
 local documentation source registration. That check is version-bound and
 limited to `command_name_only`; it does not establish parameters, scripts,
 numerical validity or engineering suitability. Production FLAC3D `static_check`
-and live Itasca execution remain unimplemented.
+and automatic live engine dispatch remain unimplemented. The Agent can run an
+authorized task through its existing tools and preserve the submission, status
+and selected outputs with [external execution observations](docs/ITASCA_EXECUTION.md).
+This does not enable the execution provider or grant engineering acceptance.
 
 The optional external `itasca-mcp` documentation connection uses a Host-selected
 existing stdio runtime. It calls only documentation search/browse tools, without
 an engine bridge or model execution. This repository does not bundle that
 runtime. Community corpus output does not independently authenticate an
-official page or its exact build. Execution integration remains separate work.
+official page or its exact build. External execution tool calls remain the
+Agent's responsibility.
 
 ## Capability classification
 
@@ -226,7 +231,7 @@ official page or its exact build. Execution integration remains separate work.
 | Real kernel mechanisms | ResearchStore, TaskState, routes, Run Ledger, Evidence/Verification, Research Map, Cognition views and completion checks. |
 | Synthetic | Fixture projects, deterministic fake execution and synthetic static checking. |
 | User-provided resources | Version-matched Itasca local documentation and registration; an existing Itasca documentation MCP runtime; sanitized Zotero snapshots, a caller-injected read-only reader, or an existing Zotero stdio runtime selected through an explicit Host registration. |
-| Unimplemented | Production FLAC3D `static_check`, real FLAC3D execution and Itasca execution integration. |
+| Unimplemented | Production FLAC3D `static_check`, automatic engine dispatch by the kernel and complete solver acceptance. |
 
 The [public acceptance summary](docs/ACCEPTANCE_SUMMARY.md) records the
 versioned code baseline and separates these categories from validation claims.
