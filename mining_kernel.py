@@ -97,13 +97,31 @@ def _write_research_report(project_root, task_id, output, markdown):
     for transaction in ResearchStore(root).list_transactions():
         for record in transaction.get("records", []):
             locator = record.get("locator", {})
-            if (record.get("type") == "Asset" and isinstance(locator, dict)
-                    and isinstance(locator.get("path"), str)
-                    and locator.get("path", "").replace("\\", "/").casefold() == relative.as_posix().casefold()):
+            material_paths = [locator.get("path")] if isinstance(locator, dict) else []
+            payload = record.get("payload", {})
+            if record.get("asset_kind") == "itasca_output" and isinstance(payload, dict):
+                material_paths.append(payload.get("path"))
+            if record.get("asset_kind") == "itasca_execution_plan" and isinstance(payload, dict):
+                plan = payload.get("plan", {})
+                script = plan.get("script", {}) if isinstance(plan, dict) else {}
+                if isinstance(script, dict):
+                    material_paths.append(script.get("path"))
+            if (record.get("type") == "Asset" and any(
+                    isinstance(path, str) and path.replace("\\", "/").casefold() == relative.as_posix().casefold()
+                    for path in material_paths)):
                 raise ValueError("report output is a registered material; choose a separate derived file")
     text = marker + markdown
     atomic_write_text(target, text)
     return relative.as_posix(), hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _bounded_json_file(path, limit=256 * 1024):
+    with Path(path).expanduser().open("rb") as stream:
+        data = stream.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"JSON input exceeds {limit} bytes")
+    return json.loads(data.decode("utf-8-sig"),
+                      parse_constant=lambda value: (_ for _ in ()).throw(ValueError("invalid JSON number")))
 
 
 def main(argv=None):
@@ -153,6 +171,30 @@ def main(argv=None):
     ro.add_argument("--task-context", choices=("production", "synthetic"), default="production")
     vo = sub.add_parser("validate-reading-observation", help="validate a reading observation without writing records or opening its source")
     vo.add_argument("observation")
+    ip = sub.add_parser("itasca-run-prepare", help="capture a selected entry script and bounded external-run plan; does not submit a task")
+    ip.add_argument("--project-root", required=True)
+    ip.add_argument("--run-id", required=True)
+    ip.add_argument("--script", required=True, help="project-relative UTF-8 Python entry script")
+    ip.add_argument("--metadata-file", required=True)
+    ip.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    io = sub.add_parser("itasca-run-record", help="record an Agent-supplied Itasca submission or status response")
+    io.add_argument("--project-root", required=True)
+    io.add_argument("--run-id", required=True)
+    io.add_argument("--operation-id", required=True)
+    io.add_argument("--observation", required=True)
+    ig = sub.add_parser("itasca-run-progress", help="recover saved external execution state without querying the engine")
+    ig.add_argument("--project-root", required=True)
+    ig.add_argument("--run-id", required=True)
+    ir = sub.add_parser("itasca-run-report", help="render a derived report from saved external execution observations")
+    ir.add_argument("--project-root", required=True)
+    ir.add_argument("--run-id", required=True)
+    ir.add_argument("--output", help="optional separate project-relative Markdown view")
+    ix = sub.add_parser("itasca-output-import", help="capture a selected bounded output associated with an external Itasca run")
+    ix.add_argument("--project-root", required=True)
+    ix.add_argument("--run-id", required=True)
+    ix.add_argument("--operation-id", required=True)
+    ix.add_argument("--path", required=True)
+    ix.add_argument("--kind", choices=("csv", "log", "text"), default="csv")
     zs = sub.add_parser("zotero-search", help="search an explicitly configured read-only Zotero connection")
     zs.add_argument("--registration", required=True)
     zs.add_argument("--query", required=True)
@@ -240,6 +282,7 @@ def main(argv=None):
     ri.add_argument("--question", required=True)
     ri.add_argument("--csv", dest="csv_path", required=True)
     ri.add_argument("--metadata-file", required=True)
+    ri.add_argument("--run-ref", help="optional completed Itasca RunReference with a matching captured CSV output")
     ri.add_argument("--encoding", default="utf-8-sig")
     ri.add_argument("--task-context", choices=("production", "synthetic"), default="production")
     rcsv = sub.add_parser("result-compare", help="compare selected point IDs from two saved result captures")
@@ -446,12 +489,42 @@ def main(argv=None):
         out = {"type": "ScriptReviewReportReceipt", "task_id": args.task_id, "output": target,
                "sha256": digest, "authority": "derived", "source_queries_performed": False,
                "run_created": False, "verification_created": False}
+    elif args.command == "itasca-run-prepare":
+        from mining_research_kernel.itasca_execution import prepare_itasca_run
+        out = {"type": "ItascaRunPrepareReceipt", **prepare_itasca_run(
+            args.project_root, run_id=args.run_id, script=args.script,
+            metadata=_bounded_json_file(args.metadata_file, 64 * 1024), task_context=args.task_context)}
+    elif args.command == "itasca-run-record":
+        from mining_research_kernel.itasca_execution import record_itasca_observation
+        out = {"type": "ItascaRunObservationReceipt", **record_itasca_observation(
+            args.project_root, run_id=args.run_id, operation_id=args.operation_id,
+            observation=_bounded_json_file(args.observation))}
+    elif args.command == "itasca-run-progress":
+        from mining_research_kernel.itasca_execution import itasca_run_progress
+        out = itasca_run_progress(args.project_root, run_id=args.run_id)
+    elif args.command == "itasca-run-report":
+        import hashlib
+        from mining_research_kernel.itasca_execution import render_itasca_run_report
+        markdown = render_itasca_run_report(args.project_root, run_id=args.run_id)
+        if args.output is None:
+            print(markdown, end="" if markdown.endswith("\n") else "\n")
+            return 0
+        marker_id = "itasca-run." + hashlib.sha256(args.run_id.encode("utf-8")).hexdigest()[:24]
+        target, digest = _write_research_report(args.project_root, marker_id, args.output, markdown)
+        out = {"type": "ItascaRunReportReceipt", "run_id": args.run_id, "output": target,
+               "sha256": digest, "authority": "derived", "engine_queried": False,
+               "execution_submitted_this_call": False, "verification_created": False}
+    elif args.command == "itasca-output-import":
+        from mining_research_kernel.itasca_outputs import capture_itasca_output
+        out = {"type": "ItascaOutputReceipt", **capture_itasca_output(
+            args.project_root, run_id=args.run_id, operation_id=args.operation_id,
+            path=args.path, kind=args.kind)}
     elif args.command == "result-import":
         from mining_research_kernel.result_comparison import import_result_csv
         metadata = json.loads(Path(args.metadata_file).read_text(encoding="utf-8-sig"))
         out = import_result_csv(args.project_root, task_id=args.task_id, question=args.question,
                                 csv_path=args.csv_path, metadata=metadata, encoding=args.encoding,
-                                task_context=args.task_context)
+                                task_context=args.task_context, run_ref=args.run_ref)
     elif args.command == "result-compare":
         from mining_research_kernel.result_comparison import compare_results
         out = compare_results(args.project_root, task_id=args.task_id, question=args.question,

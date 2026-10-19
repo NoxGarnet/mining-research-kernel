@@ -17,6 +17,7 @@ from mining_research_kernel.on_demand import _decision_bound_to_task_state
 from research_project import load_config
 from mining_research_kernel.task_engine import TaskEngine
 from workflows.research import build_research_workflow_pack
+from mining_research_kernel.itasca_outputs import MAX_OUTPUT_BYTES
 
 _PRODUCER = {"role": "host", "model": "result_comparison"}
 _DEFAULT_ACTION = "User chooses any further analysis."
@@ -132,12 +133,15 @@ def _commit_review_task(root: Path, *, task_id: str, question: str, task_context
                         mode: str, input_data: dict[str, Any], assets: list[dict[str, Any]],
                         evidences: list[dict[str, Any]], assessment: dict[str, Any],
                         operation_result: dict[str, Any], new_records: list[dict[str, Any]] | None = None,
-                        expected_revisions: dict[str, int] | None = None) -> dict[str, Any]:
+                        expected_revisions: dict[str, int] | None = None,
+                        run_ref: dict[str, Any] | None = None) -> dict[str, Any]:
     """Build and commit one fully linked evidence-review snapshot atomically."""
     store = ResearchStore(root)
     ids = _task_ids(task_id)
     source_refs = list(dict.fromkeys([f"task:{task_id}",
         *[f"asset:{a['id']}" for a in assets], *[f"evidence:{e['id']}" for e in evidences]]))
+    if run_ref is not None:
+        source_refs.append(f"runref:{run_ref['id']}")
     task_request = {"project_id": store.project_id, "task_id": task_id,
         "workflow_id": "mining_research_kernel.workflow.research",
         "task_type": "mining_research_kernel.task.evidence_review", "maturity": "known_workflow",
@@ -204,6 +208,9 @@ def _commit_review_task(root: Path, *, task_id: str, question: str, task_context
         asset = record_by_id[evidence["asset_ref"]]
         if asset.get("revision") == 1 and asset.get("id") in {r["id"] for r in (new_records or [])}:
             relationships.append(_relationship(_edge_id(task_id, f"evidence-asset-{index}"), "evidence_derived_from_asset", evidence, asset, store.project_id, source_refs))
+        if run_ref is not None:
+            relationships.append(_relationship(_edge_id(task_id, f"run-evidence-{index}"),
+                "run_produces_evidence", run_ref, evidence, store.project_id, source_refs))
     relationships.append(_relationship(_edge_id(task_id, "decision-route"), "decision_closes_route", decision, route, store.project_id, source_refs))
     store.commit("result-csv." + hashlib.sha256(task_id.encode()).hexdigest()[:32], _PRODUCER,
         records, relationships, expected_revisions=expected_revisions or {})
@@ -235,10 +242,116 @@ def _find_capture(store: ResearchStore, asset_ref: str) -> tuple[dict[str, Any],
     return asset, evidence
 
 
+def _validate_itasca_csv_binding(root: Path, store: ResearchStore, run_ref_id: str,
+                                 source_path: Path, task_context: str, metadata: dict[str, Any]
+                                 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    from mining_research_kernel.itasca_execution import load_itasca_run
+
+    run_ref = store.latest_record(run_ref_id, "RunReference")
+    if run_ref is None:
+        raise ValueError(f"unknown Itasca RunReference: {run_ref_id}")
+    loaded = load_itasca_run(root, run_ref.get("run_id"))
+    plan = loaded.get("plan") if isinstance(loaded, Mapping) else None
+    current = loaded.get("run_ref") if isinstance(loaded, Mapping) else None
+    if (not isinstance(plan, Mapping) or plan.get("kind") != "itasca_execution_plan"
+            or plan.get("schema_version") != 1 or not isinstance(current, Mapping)
+            or current.get("id") != run_ref_id or current.get("revision") != run_ref.get("revision")):
+        raise ValueError("run_ref is not the current Itasca RunReference and execution plan")
+    if current.get("status") != "completed":
+        raise ValueError("run-bound CSV imports require a completed Itasca run")
+    if plan.get("task_context") != task_context:
+        raise ValueError("CSV task_context does not match the Itasca run")
+    if (task_context == "production" and
+            (plan.get("origin") == "synthetic" or metadata.get("origin") == "synthetic")):
+        raise ValueError("synthetic Itasca output cannot be imported as production")
+    expected_origin = "synthetic" if task_context == "synthetic" else "provided_export"
+    if metadata.get("origin") != expected_origin:
+        raise ValueError("CSV metadata origin does not match its Itasca run context")
+
+    path_text = source_path.resolve().relative_to(root.resolve()).as_posix()
+    try:
+        with source_path.open("rb") as source:
+            raw = source.read(MAX_OUTPUT_BYTES + 1)
+    except OSError as exc:
+        raise ValueError(f"selected Itasca CSV cannot be read: {exc}") from exc
+    if len(raw) > MAX_OUTPUT_BYTES:
+        raise ValueError(f"selected Itasca CSV exceeds maximum size of {MAX_OUTPUT_BYTES} bytes")
+    digest = hashlib.sha256(raw).hexdigest()
+    match = None
+    evidence_match = None
+    transactions = store.list_transactions()
+    for transaction in transactions:
+        for asset in transaction.get("records", []):
+            payload = asset.get("payload") if asset.get("type") == "Asset" else None
+            if (asset.get("asset_kind") != "itasca_output" or not isinstance(payload, dict)
+                    or payload.get("run_ref_id") != run_ref_id or payload.get("path") != path_text
+                    or payload.get("sha256") != digest or payload.get("output_kind") != "csv"
+                    or payload.get("diagnostic_only") is not False
+                    or payload.get("task_context") != plan.get("task_context")
+                    or payload.get("origin") != plan.get("origin")):
+                continue
+            try:
+                import base64
+                captured = base64.b64decode(payload.get("bytes_base64", ""), validate=True)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("captured Itasca CSV snapshot is damaged") from exc
+            if (hashlib.sha256(captured).hexdigest() != digest or captured != raw
+                    or payload.get("size_bytes") != len(captured)
+                    or hashlib.sha256(_canonical(payload)).hexdigest() != asset.get("content_sha256")):
+                raise ValueError("captured Itasca CSV bytes do not match the selected file")
+            evidence = next((record for record in transaction.get("records", [])
+                             if record.get("type") == "Evidence" and record.get("id") == payload.get("evidence_id")), None)
+            relations = transaction.get("relationships", [])
+            output_run_revision = payload.get("run_revision")
+            historical_ref = next((record for prior_tx in transactions
+                for record in prior_tx.get("records", [])
+                if record.get("type") == "RunReference" and record.get("id") == run_ref_id
+                and record.get("revision") == output_run_revision), None)
+            identity_fields = ("run_id", "manifest_sha256", "task_id", "engine_session", "task_context")
+            same_identity = (isinstance(historical_ref, Mapping)
+                and historical_ref.get("status") == "completed"
+                and all(historical_ref.get(field) == current.get(field) for field in identity_fields)
+                and current.get("manifest_sha256") == hashlib.sha256(_canonical(dict(plan))).hexdigest()
+                and current.get("engine_session") == plan.get("engine_session")
+                and current.get("task_context") == plan.get("task_context")
+                and isinstance(current.get("task_id"), str) and bool(current.get("task_id")))
+            if not same_identity:
+                raise ValueError("captured output historical RunReference identity does not match the current completed run")
+            if (evidence is None or evidence.get("asset_ref") != asset.get("id")
+                    or not any(edge.get("relation") == "run_produces_evidence"
+                               and edge.get("from_id") == run_ref_id
+                               and edge.get("from_revision") == output_run_revision
+                               and edge.get("to_id") == evidence.get("id")
+                               and edge.get("to_revision") == evidence.get("revision") for edge in relations)
+                    or not any(edge.get("relation") == "evidence_derived_from_asset"
+                               and edge.get("from_id") == evidence.get("id")
+                               and edge.get("from_revision") == evidence.get("revision")
+                               and edge.get("to_id") == asset.get("id")
+                               and edge.get("to_revision") == asset.get("revision") for edge in relations)):
+                raise ValueError("captured Itasca CSV is missing its run or asset binding")
+            match, evidence_match = asset, evidence
+            break
+        if match is not None:
+            break
+    if match is None:
+        raise ValueError("CSV has no captured output bound to this Itasca RunReference")
+    if source_path.resolve() != (root / path_text).resolve():
+        raise ValueError("CSV path does not match the captured Itasca output path")
+    return dict(run_ref), {"asset": match, "evidence": evidence_match, "path": path_text, "sha256": digest}
+
+
 def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, question: str,
                       csv_path: str | os.PathLike[str], metadata: dict[str, Any],
-                      encoding: str = "utf-8-sig", task_context: str = "production") -> dict[str, Any]:
-    root = Path(project_root).expanduser().resolve()
+                      encoding: str = "utf-8-sig", task_context: str = "production",
+                      run_ref: str | None = None) -> dict[str, Any]:
+    raw_root = Path(project_root).expanduser()
+    if run_ref is not None:
+        from mining_research_kernel.artifacts import _absolute_without_follow, _reject_reparse_chain
+        unresolved_root = _absolute_without_follow(raw_root)
+        _reject_reparse_chain(unresolved_root, "project_root")
+        root = unresolved_root.resolve()
+    else:
+        root = raw_root.resolve()
     task_id = _id(task_id, "task_id")
     if not isinstance(question, str) or not question.strip() or len(question) > 2000:
         raise ValueError("question must be a non-empty string of at most 2000 characters")
@@ -248,6 +361,8 @@ def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, que
         raise ValueError("csv_path must be a non-empty bounded string or Path")
     if not isinstance(encoding, str) or not encoding.strip() or len(encoding) > 100:
         raise ValueError("encoding must be a non-empty bounded string")
+    if run_ref is not None and (not isinstance(run_ref, str) or not run_ref.strip() or len(run_ref) > 64):
+        raise ValueError("run_ref must be a bounded RunReference id or null")
     meta, metadata_gaps = _metadata(metadata)
     if (task_context == "synthetic") != (meta["origin"] == "synthetic"):
         raise ValueError("synthetic metadata and task_context must be used together")
@@ -255,9 +370,16 @@ def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, que
     store = ResearchStore(root)
     request_core = {"task_id": task_id, "question": question.strip(), "metadata": meta,
                     "encoding": encoding, "task_context": task_context}
+    if run_ref is not None:
+        request_core["run_ref"] = run_ref
     # Compare the path identity without opening the source on replay.
     source_path = _resolve_source(root, csv_path)
     locator, source_label = _locator(root, source_path)
+    bound_run_ref = None
+    itasca_binding = None
+    if run_ref is not None:
+        bound_run_ref, itasca_binding = _validate_itasca_csv_binding(
+            root, store, _id(run_ref, "run_ref"), source_path, task_context, meta)
     request_hash = _sha256_bytes(_canonical({**request_core, "locator": locator}))
     prior = _state(store, task_id)
     if prior is not None:
@@ -270,6 +392,8 @@ def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, que
                      evidence_refs=copy.deepcopy(recorded["evidence_refs"]),
                      capture_asset_ref=recorded["capture_asset_ref"], source_label=source_label)
     parsed = read_result_csv(source_path, encoding=encoding)
+    if itasca_binding is not None and parsed["sha256"] != itasca_binding["sha256"]:
+        raise ValueError("CSV bytes changed after Itasca output capture")
     if meta["origin"] == "synthetic" and task_context != "synthetic":
         raise ValueError("synthetic data cannot be imported as production")
     raw_hash = parsed["sha256"]
@@ -281,6 +405,14 @@ def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, que
                "rows": parsed["rows"], "diagnostics": parsed["diagnostics"], "limits": parsed["limits"],
                "metadata": meta, "metadata_gaps": metadata_gaps,
                "conditions_are_caller_assertions": True}
+    if bound_run_ref is not None and itasca_binding is not None:
+        payload["run_binding"] = {"run_ref_id": bound_run_ref["id"],
+            "run_revision": bound_run_ref["revision"],
+            "import_run_revision": bound_run_ref["revision"],
+            "output_run_revision": itasca_binding["asset"]["payload"]["run_revision"],
+            "output_asset_ref": itasca_binding["asset"]["id"],
+            "path": itasca_binding["path"], "source_sha256": itasca_binding["sha256"],
+            "provenance_limit": "caller-association-not-authenticated"}
     snapshot_hash = _sha256_bytes(_canonical(payload))
     _task_ids(task_id)
     suffix = hashlib.sha256(task_id.encode()).hexdigest()[:24]
@@ -318,13 +450,19 @@ def import_result_csv(project_root: str | os.PathLike[str], *, task_id: str, que
                "columns": parsed["columns"], "row_count": parsed["row_count"], "rows": parsed["rows"],
                "diagnostics": parsed["diagnostics"], "quality_gaps": quality_gaps, "limits": parsed["limits"],
                "judgment": copy.deepcopy(assessment["judgment"])}
+    if "run_binding" in payload:
+        capture["run_binding"] = copy.deepcopy(payload["run_binding"])
     operation_result = {"request_sha256": request_hash, "capture": capture,
                      "asset_refs": [asset_id], "capture_asset_ref": asset_id,
                      "evidence_refs": [evidence_id]}
+    expected_revisions = {bound_run_ref["id"]: bound_run_ref["revision"]} if bound_run_ref is not None else None
+    import_input = {"metadata": meta, "source_sha256": raw_hash}
+    if bound_run_ref is not None:
+        import_input["run_ref_id"] = bound_run_ref["id"]
     _commit_review_task(root, task_id=task_id, question=question.strip(), task_context=task_context,
-        mode=mode, input_data={"metadata": meta, "source_sha256": raw_hash}, assets=[asset],
+        mode=mode, input_data=import_input, assets=[asset],
         evidences=[evidence], assessment=assessment, operation_result=operation_result,
-        new_records=[asset, evidence])
+        new_records=[asset, evidence], expected_revisions=expected_revisions, run_ref=bound_run_ref)
     final_state = _state(store, task_id)
     return _base(task_id, final_state["packet"], False, capture=capture,
                  asset_refs=[asset_id], capture_asset_ref=asset_id,
@@ -509,6 +647,9 @@ def compare_results(project_root: str | os.PathLike[str], *, task_id: str, quest
                 "diagnostics": copy.deepcopy(cpayload["diagnostics"]),
                 "citation": {"source_label": cpayload["source_label"], "locator": copy.deepcopy(cpayload["source_locator"]),
                              "metadata": copy.deepcopy(cpayload["metadata"]), "columns": copy.deepcopy(cpayload["columns"])}}]
+    for source, payload_source in zip(sources, (bpayload, cpayload)):
+        if isinstance(payload_source.get("run_binding"), Mapping):
+            source["run_binding"] = copy.deepcopy(payload_source["run_binding"])
 
     assessment = {"scope": "material_reading_and_evidence_synthesis_only", "comparison": comparison,
         "related_context": related_context,
@@ -593,15 +734,31 @@ def render_result_comparison_report(project_root: str | os.PathLike[str], *, tas
     def md(value: Any) -> str:
         return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
 
+    def run_binding_note(binding: Mapping[str, Any], *, indent: str = "") -> str:
+        return (f"{indent}RunReference `{md(binding.get('run_ref_id'))}`; captured run revision "
+                f"`{md(binding.get('output_run_revision'))}`; import run revision "
+                f"`{md(binding.get('import_run_revision', binding.get('run_revision')))}`; output Asset "
+                f"`{md(binding.get('output_asset_ref'))}`; limitation: `caller-association-not-authenticated`. ")
+
     progress = result_comparison_progress(project_root, task_id=task_id)
+    bound_sources = (progress["captures"] if progress["kind"] == "import"
+                     else progress["comparisons"][0]["sources"])
+    scope_note = (
+        "Captured exported data only. This report does not execute a solver; "
+        "engineering causality and physical comparability are not verified."
+        if any(isinstance(item.get("run_binding"), Mapping) for item in bound_sources)
+        else "Existing exported data only. No solver was run; engineering causality and physical comparability are not verified."
+    )
     lines = [f"# Result CSV {progress['kind']} report", "",
-             "Existing exported data only. No solver was run; engineering causality and physical comparability are not verified.", ""]
+             scope_note, ""]
     if progress["kind"] == "import":
         for capture in progress["captures"]:
             lines.extend([f"## Capture {capture['metadata']['case_id']}", "",
                 f"- Original source SHA-256: `{capture['source_sha256']}`",
                 f"- Snapshot SHA-256: `{capture['snapshot_sha256']}`",
                 f"- Source: `{capture['source_label']}`",
+                *(["- Run binding: " + run_binding_note(capture["run_binding"])]
+                  if isinstance(capture.get("run_binding"), Mapping) else []),
                 f"- Metadata: `{json.dumps(capture['metadata'], ensure_ascii=False, sort_keys=True)}`",
                 f"- Diagnostics: `{json.dumps(capture['diagnostics'], ensure_ascii=False, sort_keys=True)}`", "",
                 "| Point | Value | Status | Lines |", "|---|---|---|---|"])
@@ -619,6 +776,8 @@ def render_result_comparison_report(project_root: str | os.PathLike[str], *, tas
         for source in full["sources"]:
             lines.extend([f"- `{source['asset_ref']}` Asset revision {source['asset_revision']}, Evidence revision {source['evidence_revision']}",
                 f"  Original SHA-256: `{source['source_sha256']}`; snapshot SHA-256: `{source['snapshot_sha256']}`",
+                *(["  " + run_binding_note(source["run_binding"])]
+                  if isinstance(source.get("run_binding"), Mapping) else []),
                 f"  Citation: `{json.dumps(source['citation'], ensure_ascii=False, sort_keys=True)}`",
                 f"  Diagnostics: `{json.dumps(source['diagnostics'], ensure_ascii=False, sort_keys=True)}`"])
         lines.extend(["", "### Selected points", "",

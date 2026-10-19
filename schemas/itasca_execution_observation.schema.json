@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent-supplied Itasca MCP execution observation",
+  "type": "object",
+  "required": ["schema_version", "kind", "origin", "captured_at", "phase", "tool_result"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "kind": {"const": "itasca_execution_observation"},
+    "origin": {"enum": ["agent_supplied", "synthetic"]},
+    "captured_at": {"type": "string", "format": "date-time"},
+    "phase": {"enum": ["submission", "status"]},
+    "tool_result": {
+      "oneOf": [
+        {"type": "object", "required": ["ok", "data"], "properties": {"ok": {"const": true}, "data": {"type": "object"}}, "additionalProperties": false},
+        {"type": "object", "required": ["ok", "error"], "properties": {"ok": {"const": false}, "error": {"type": "object", "required": ["code", "message"], "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "details": {"type": ["object", "null"]}}, "additionalProperties": true}}, "additionalProperties": false}
+      ]
+    }
+  },
+  "additionalProperties": false
+}
