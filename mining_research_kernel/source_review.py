@@ -12,6 +12,7 @@ from mining_research_kernel.r2_workflow import (
 )
 from mining_research_kernel.zotero_reading import validate_capture
 from mining_research_kernel.reading_observation import validate_observation
+from mining_research_kernel.source_identity import paper_identity, validate_distinct_papers
 
 
 _CITATION = re.compile(r"\[evidence:([^\]]+)\]")
@@ -267,15 +268,8 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
         raise ValueError("source review requires at least one Zotero capture and one documentation query snapshot")
     if review_mode == "literature_comparison":
         papers = [o for o in overviews if o["asset_kind"] in {"zotero_reading_capture", "reading_observation"}]
-        identities = []
-        for overview in papers:
-            identity = overview["identity"]
-            doi = identity.get("doi")
-            key = ("doi", doi.lower()) if isinstance(doi, str) and doi else (
-                ("source_id", identity.get("source_id")) if overview["asset_kind"] == "reading_observation"
-                else ("zotero", identity.get("instance_id"), identity.get("library_id"), identity.get("item_key")))
-            identities.append(key)
-        if len(papers) < 2 or len(set(identities)) != len(papers):
+        validate_distinct_papers(assets)
+        if len(papers) < 2:
             raise ValueError("literature comparison requires at least two distinct paper identities")
         if any(not (o.get("coverage", {}).get("read_page_ranges") if o["asset_kind"] == "zotero_reading_capture"
                     else o.get("coverage", {}).get("read_passages")) for o in papers):
@@ -427,6 +421,7 @@ def record_source_review(project_root, *, task_id: str, operation_id: str, note:
 
 def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[dict[str, Any]]:
     results = []
+    paper_assets = []
     bindings = packet.get("input", {}).get("source_bindings", [])
     if not isinstance(bindings, list) or not bindings:
         raise ValueError("source review packet has no source bindings")
@@ -457,6 +452,8 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
         if checked_asset["asset_kind"] not in {"zotero_reading_capture", "documentation_query_snapshot", "reading_observation"}:
             raise ValueError("source review packet includes an unsupported source kind")
         kinds.add(checked_asset["asset_kind"])
+        if checked_asset["asset_kind"] in {"zotero_reading_capture", "reading_observation"}:
+            paper_assets.append(checked_asset)
         if packet.get("task_context") != "synthetic":
             if checked_asset["asset_kind"] == "zotero_reading_capture" and payload.get("request", {}).get("capture", {}).get("origin") == "synthetic":
                 raise ValueError("synthetic source records require synthetic task_context")
@@ -520,17 +517,10 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
             elif doc_result.get("status") in {"CANNOT_READ", "CANNOT_VERIFY"}:
                 reading_status = "READ_INSUFFICIENT"
         identity = None
-        if asset.get("asset_kind") == "reading_observation":
-            src = payload.get("request", {}).get("observation", {}).get("source", {})
-            identity = ("doi", src.get("doi").lower()) if src.get("doi") else ("source_id", src.get("source_id"))
-        elif asset.get("asset_kind") == "zotero_reading_capture":
-            cap = payload.get("request", {}).get("capture", {})
-            item = cap.get("item", {})
-            identity = (("doi", item.get("doi").lower()) if item.get("doi") else
-                        ("zotero", cap.get("instance_id"), cap.get("library_id"), item.get("key")))
+        identity = paper_identity(asset)
         results.append({"asset_id": asset["id"], "evidence_refs": list(selected_evidence),
                         "content_sha256": asset["content_sha256"],
-                        "paper_identity": identity,
+                        "paper_identity": identity["primary"] if identity else None,
                         "locator": {"asset_revision": asset["revision"], "asset_kind": asset["asset_kind"]},
                         "reading_status": reading_status,
                         "citation_evidence_allowed": citation_evidence_allowed,
@@ -539,9 +529,9 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
     if mode == "combined_sources" and not {"zotero_reading_capture", "documentation_query_snapshot"}.issubset(kinds):
         raise ValueError("source review task must bind both required source kinds")
     if mode == "literature_comparison":
+        validate_distinct_papers(paper_assets)
         papers = [item for item in results if item.get("paper_identity")]
-        identities = {item["paper_identity"] for item in papers}
-        if len(papers) < 2 or len(identities) != len(papers):
+        if len(papers) < 2:
             raise ValueError("literature comparison requires at least two distinct paper identities")
     if bound_assets != set(packet.get("asset_refs", [])) or bound_evidence != set(packet.get("evidence_refs", [])):
         raise ValueError("source review task Asset/Evidence allowlist does not match its source bindings")

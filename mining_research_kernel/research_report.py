@@ -8,6 +8,7 @@ import json
 import re
 
 from mining_research_kernel.records import ResearchStore
+from mining_research_kernel.source_identity import identities_match, paper_identity, primary_identity_label
 
 
 _MAX_LINEAGE = 64
@@ -246,20 +247,10 @@ def _render_comparison(lines, comparison, assets, evidence, bindings):
 
 
 def _source_identity(asset, asset_ref):
-    observation = _reading_observation(asset)
-    if observation:
-        source = observation["source"]
-        return "paper:doi:" + source["doi"] if source.get("doi") else "paper:source:" + source["source_id"]
-    capture = _paper_capture(asset)
-    item = capture.get("item", {}) if capture else {}
-    if isinstance(item, Mapping) and item.get("doi"):
-        return "paper:doi:" + item["doi"]
-    if isinstance(item, Mapping) and item.get("key"):
-        return "paper:" + ":".join(str(capture.get(k) or "") for k in ("instance_id", "library_id")) + ":" + str(item["key"])
-    return "asset:" + str(asset_ref)
+    return primary_identity_label(asset, asset_ref)
 
 
-def _decision_sources(decision, versions):
+def _decision_sources(decision, versions, previous_sources=None):
     source_decision = _source_decision_ancestor(decision, versions)
     if source_decision is None:
         return {}, None
@@ -277,7 +268,21 @@ def _decision_sources(decision, versions):
         aid = row.get("asset_ref")
         binding = bindings.get(aid, {})
         asset = pinned_assets.get(aid) or {}
+        identity_info = paper_identity(asset)
         identity = _source_identity(asset, aid)
+        match_keys = []
+        if previous_sources:
+            for previous_key, previous_row in previous_sources.items():
+                previous_identity = previous_row.get("identity")
+                if identity_info and isinstance(previous_identity, Mapping) and identities_match(
+                        identity_info, previous_identity):
+                    match_keys.append(previous_key)
+        if len(match_keys) > 1:
+            raise ValueError("source identity matches multiple records in the preceding research step")
+        if match_keys:
+            identity = match_keys[0]
+        if identity_info is None:
+            identity_info = {"keys": {("asset", aid)}, "source_id": None, "doi": None}
         capture = _paper_capture(asset)
         pages = capture.get("pages", []) if isinstance(capture, Mapping) else []
         coverage = sorted({(p.get("attachment_key"), p.get("start_page"), p.get("end_page"), p.get("status"))
@@ -292,7 +297,7 @@ def _decision_sources(decision, versions):
                        if isinstance(cell, Mapping) for cite in cell.get("citations", [])
                        if isinstance(cite, Mapping) and isinstance(cite.get("evidence_id"), str)})
         rows[identity] = {"asset_ref": aid, "coverage": coverage, "statuses": status,
-                          "evidence": refs, "caption": _asset_caption(asset)}
+                          "evidence": refs, "caption": _asset_caption(asset), "identity": identity_info}
     current_judgment = decision.get("judgment", {})
     return rows, current_judgment.get("summary") or (comparison.get("summary") if isinstance(comparison, Mapping) else None)
 
@@ -560,7 +565,8 @@ def render_research_report(project_root, *, task_id: str) -> str:
             lines.append(f"- 任务 {_code_id(state['id'])}（TaskState r{state.get('revision')}），判断 {_code_id(did)} r{rev if rev else '?'}")
             if previous:
                 old_sources, old_summary = _decision_sources(previous, versions)
-                new_sources, new_summary = _decision_sources(saved_decision, versions) if saved_decision else ({}, None)
+                new_sources, new_summary = (_decision_sources(saved_decision, versions, old_sources)
+                                            if saved_decision else ({}, None))
                 old_ids, new_ids = set(old_sources), set(new_sources)
                 lines.append(f"  - 来源变化（按文献身份）：新增 {', '.join(sorted(new_ids-old_ids)) or '无'}；"
                              f"移除 {', '.join(sorted(old_ids-new_ids)) or '无'}。")

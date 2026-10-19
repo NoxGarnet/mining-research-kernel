@@ -12,6 +12,7 @@ from mining_research_kernel.literature_comparison import (
 from mining_research_kernel.reading_observation import record_reading_observation
 from mining_research_kernel.records import ResearchStore
 from mining_research_kernel.research_continuation import continue_research, begin_research
+from mining_research_kernel.research_report import render_research_report
 from mining_research_kernel.r2_workflow import _sha256_json
 from mining_research_kernel.source_review import start_source_review, record_source_review
 from mining_research_kernel import source_review as source_review_module
@@ -128,6 +129,109 @@ class GeneralReadingContinuityTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "request hash mismatch"):
             start_literature_comparison(self.project, task_id="after-payload-change", question="Compare",
                                         asset_refs=[self.assets[0], self.assets[1]], dimensions=["results"])
+
+    def test_source_id_alias_blocks_mixed_doi_presence_and_conflicts_are_explained(self):
+        no_doi = record_reading_observation(
+            self.project, observation_id="stable-no-doi", observation=observation("stable-paper", None))
+        with_doi = record_reading_observation(
+            self.project, observation_id="stable-with-doi",
+            observation=observation("stable-paper", "10.1234/new-doi"))
+        with self.assertRaisesRegex(ValueError, "distinct paper identities"):
+            start_literature_comparison(self.project, task_id="stable-id-duplicate", question="Compare",
+                                        asset_refs=[no_doi["asset_ref"], with_doi["asset_ref"]],
+                                        dimensions=["results"])
+
+        conflicting = record_reading_observation(
+            self.project, observation_id="stable-conflicting-doi",
+            observation=observation("stable-paper", "10.1234/other-doi"))
+        with self.assertRaisesRegex(ValueError, "stable source_id.*different DOIs"):
+            start_literature_comparison(self.project, task_id="stable-id-conflict", question="Compare",
+                                        asset_refs=[with_doi["asset_ref"], conflicting["asset_ref"]],
+                                        dimensions=["results"])
+
+    def test_distinct_source_ids_and_dois_remain_independent_papers(self):
+        result = start_literature_comparison(self.project, task_id="distinct-identities", question="Compare",
+                                             asset_refs=self.assets, dimensions=["results"])
+        self.assertEqual(self.assets, [item["asset_ref"] for item in result["sources"]])
+
+    def test_doi_upgrade_keeps_report_source_and_pins_each_citation_revision(self):
+        old_b = record_reading_observation(
+            self.project, observation_id="stable-b-v1", observation=observation("stable-b", None))
+        first_assets = [self.assets[0], old_b["asset_ref"]]
+        first = begin_research(self.project, task_id="identity-round-1", question="Compare the reported outcomes",
+                               asset_refs=first_assets, dimensions=["results"])
+
+        def comparison(packet, asset_refs, summary):
+            store = ResearchStore(self.project)
+            rows = []
+            for aid in asset_refs:
+                evidence_id = next(ref for ref in packet["evidence_refs"]
+                                   if store.latest_record(ref, "Evidence")["asset_ref"] == aid)
+                rows.append({"asset_ref": aid, "dimensions": {"results": {
+                    "status": "reported", "value": "Observed outcome", "interpretation": "Within saved scope.",
+                    "citations": [{"evidence_id": evidence_id, "locator": "pages 2-3"}]}}})
+            return {"schema_version": 1, "question": "Compare the reported outcomes", "summary": summary,
+                    "summary_cells": [{"asset_ref": aid, "dimension": "results"} for aid in asset_refs],
+                    "next": "The user may choose another reading step.", "sources": rows,
+                    "differences": [], "limitations": ["Only saved passages are represented."]}
+
+        record_literature_comparison(self.project, task_id="identity-round-1", operation_id="identity-review-1",
+                                     comparison=comparison(first["task_packet"], first_assets, "First bounded reading."))
+        previous_report = render_research_report(self.project, task_id="identity-round-1")
+        new_b = record_reading_observation(
+            self.project, observation_id="stable-b-v2",
+            observation=observation("stable-b", "10.1234/stable-b"))
+        next_assets = [self.assets[0], new_b["asset_ref"]]
+        second = continue_research(self.project, task_id="identity-round-2", from_task_id="identity-round-1",
+                                   asset_refs=next_assets, reason="Add DOI metadata to the same stable source.")
+        record_literature_comparison(self.project, task_id="identity-round-2", operation_id="identity-review-2",
+                                     comparison=comparison(second["task_packet"], next_assets,
+                                                           "The same source now has DOI metadata."))
+
+        report = render_research_report(self.project, task_id="identity-round-2")
+        self.assertIn("新增 无；移除 无", report)
+        self.assertIn("paper:source:stable-b：Asset 更换", report)
+        self.assertIn(old_b["evidence_ref"], report)
+        self.assertIn(new_b["evidence_ref"], report)
+        self.assertIn(new_b["evidence_ref"] + " r1", report)
+        self.assertEqual(previous_report, render_research_report(self.project, task_id="identity-round-1"))
+
+    def test_two_round_report_preserves_doi_primary_identity_label(self):
+        question = "Compare the reported outcomes"
+
+        def comparison(packet, asset_refs, summary):
+            store = ResearchStore(self.project)
+            rows = []
+            for aid in asset_refs:
+                evidence_id = next(ref for ref in packet["evidence_refs"]
+                                   if store.latest_record(ref, "Evidence")["asset_ref"] == aid)
+                rows.append({"asset_ref": aid, "dimensions": {"results": {
+                    "status": "reported", "value": "Observed outcome", "interpretation": "Within saved scope.",
+                    "citations": [{"evidence_id": evidence_id, "locator": "pages 2-3"}]}}})
+            return {"schema_version": 1, "question": question, "summary": summary,
+                    "summary_cells": [{"asset_ref": aid, "dimension": "results"} for aid in asset_refs],
+                    "next": "The user may choose another reading step.", "sources": rows,
+                    "differences": [], "limitations": ["Only saved passages are represented."]}
+
+        first_assets = list(self.assets)
+        first = begin_research(self.project, task_id="doi-label-round-1", question=question,
+                               asset_refs=first_assets, dimensions=["results"])
+        record_literature_comparison(self.project, task_id="doi-label-round-1", operation_id="doi-label-review-1",
+                                     comparison=comparison(first["task_packet"], first_assets, "First saved reading."))
+
+        reread_a = record_reading_observation(
+            self.project, observation_id="paper-a-doi-reread",
+            observation=observation("paper-1", "10.1234/example.1"))
+        next_assets = [reread_a["asset_ref"], self.assets[1]]
+        second = continue_research(self.project, task_id="doi-label-round-2", from_task_id="doi-label-round-1",
+                                   asset_refs=next_assets, reason="Reread paper A within the same DOI identity.")
+        record_literature_comparison(self.project, task_id="doi-label-round-2", operation_id="doi-label-review-2",
+                                     comparison=comparison(second["task_packet"], next_assets,
+                                                           "Paper A has expanded saved coverage."))
+
+        report = render_research_report(self.project, task_id="doi-label-round-2")
+        self.assertIn("paper:doi:10.1234/example.1：Asset 更换", report)
+        self.assertIn("新增 无；移除 无", report)
 
     def test_duplicate_doi_between_zotero_and_general_observation_is_rejected(self):
         paper = capture()
