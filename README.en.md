@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-This overview and the workspace-start, continuing-research, bounded FLAC3D script-review and existing-CSV result-comparison guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
+This overview and the workspace-start, continuing-research, general-reading-observation, bounded FLAC3D script-review and existing-CSV result-comparison guides have Chinese and English versions. Other guides remain mostly in English; some examples are in Chinese.
 
 A filesystem-native workspace and optional research kernel for Agent-assisted
 mining research. Start with a small Markdown workspace, then enable durable
@@ -16,6 +16,7 @@ offline examples use the Python standard library.
 - [Continue a project](docs/PROJECT_CONTEXT.md): navigate one project's entry without creating a task or reading its source materials.
 - [Optionally keep research records](docs/OPTIONAL_RESEARCH.md): enable an existing project, record a local documentation query, and recover its evidence and limits.
 - [Continue one research question](docs/CONTINUING_RESEARCH.md): let the Agent recover a prior judgment, add selected readings and generate a readable report with changes and gaps.
+- [Record general reading observations](docs/READING_OBSERVATIONS.md): accept Agent-obtained web, local-PDF or text readings, preserve provenance and limits, and compare or continue them under one question.
 - [Read documentation passages](docs/ITASCA_READING.md): read registered official HTML sections or query an existing Itasca MCP documentation connection, preserving their different provenance.
 - [Compare literature for one question](docs/LITERATURE_COMPARISON.md): compare selected papers and optional documentation with page citations and explicit missing information.
 - [FLAC3D review workflow](docs/FLAC3D_FIRST_TASK.md): identify inputs and version, check applicable official sources, and save findings for continuation.
@@ -120,6 +121,12 @@ for a later process. Agents call it through the CLI or public Python API;
 models, Host applications and user-provided resources remain outside the
 repository.
 
+The Agent chooses existing browsing, PDF and OCR tools and interprets their output.
+The Kernel preserves bounded observations and checks programmable associations,
+unknowns and history. Importing an observation does not authenticate its source,
+attest actual reading or verify the interpretation. Zotero and other connections
+are optional adapters.
+
 A completed task or Run means that the declared workflow scope completed. It
 does not establish that a hypothesis is true or that an engineering design is
 fit for use. Model and session identifiers support provenance and comparison;
@@ -128,6 +135,7 @@ an independent review.
 
 ## Current capabilities
 
+- Tool-independent bounded reading observations for web articles, local PDFs and text, preserving declared source identity/version, reader method, locators and limits. Reuse one ResearchQuestion for comparison, additional readings and reports; see the [guide](docs/READING_OBSERVATIONS.md) and [offline example](examples/reading_observations/README.md).
 - Read-only result CSV captures and bounded two-case comparisons preserve raw values, physical line locators, declared quantity/units/conditions and quality diagnostics. Compute signed deltas at selected point IDs, associate historical script/documentation context and recover reports; see the [result comparison guide](docs/RESULT_COMPARISON.md).
 - Recoverable FLAC3D excerpt reviews with selected lines, file hashes, version-matched official passages and authored findings; optionally compare a selected current file read-only. This does not execute scripts or certify model correctness; see the [script review guide](docs/FLAC3D_SCRIPT_REVIEW.md).
 - Continued source review under one ResearchQuestion, retaining prior task and

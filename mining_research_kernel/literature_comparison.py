@@ -7,7 +7,9 @@ from typing import Any
 
 from mining_research_kernel.records import ResearchStore
 from mining_research_kernel.r2_workflow import _id, task_record_evidence_review
-from mining_research_kernel.source_review import _sources_for_task, start_source_review
+from mining_research_kernel.source_review import (
+    _expected_source_revisions, _sources_for_task, start_source_review,
+)
 
 
 DEFAULT_DIMENSIONS = ["materials", "conditions", "methods", "parameters", "results", "applicability"]
@@ -103,7 +105,16 @@ def _validate_comparison(store: ResearchStore, packet: Mapping, comparison: Any)
         cells = row.get("dimensions")
         if not isinstance(cells, Mapping) or set(cells) != set(dimensions):
             raise ValueError("each source must provide exactly one cell for every requested dimension")
-        paper = asset.get("asset_kind") == "zotero_reading_capture"
+        kind = asset.get("asset_kind")
+        paper = kind == "zotero_reading_capture"
+        generic_read = {}
+        if kind == "reading_observation":
+            observation = asset.get("payload", {}).get("request", {}).get("observation", {})
+            generic_read = {p["locator"]["value"]: p for p in observation.get("passages", [])
+                            if isinstance(p, Mapping) and p.get("status") == "read"
+                            and isinstance(p.get("locator"), Mapping)}
+            if not generic_read:
+                raise ValueError("reading observation has no successful passage and cannot support comparison")
         capture = asset.get("payload", {}).get("request", {}).get("capture", {})
         for dimension, cell in cells.items():
             if (not isinstance(cell, Mapping) or set(cell) != {"status", "value", "interpretation", "citations"}
@@ -142,6 +153,11 @@ def _validate_comparison(store: ResearchStore, packet: Mapping, comparison: Any)
                         raise ValueError("paper citation attachment and page range are outside actual saved read coverage")
                     citation_key = (citation["evidence_id"], citation["attachment_key"],
                                     page_range["start_page"], page_range["end_page"])
+                elif kind == "reading_observation":
+                    locator = citation.get("locator")
+                    if not isinstance(locator, str) or locator not in generic_read:
+                        raise ValueError("reading observation citation locator must exactly match a successful captured passage")
+                    citation_key = (citation["evidence_id"], locator)
                 else:
                     result = asset.get("payload", {}).get("documentation_result", {})
                     if (result.get("status") not in {"VERIFIED", "SYNTHETIC_VERIFIED", "READ_WITH_LIMITS"}
@@ -245,6 +261,8 @@ def record_literature_comparison(project_root, *, task_id: str, operation_id: st
                   "material_gaps": [{"asset_id": item["asset_id"], "reason": item["reason"],
                                      "next_action": "Keep the source scope limitation attached to interpretation."}
                                     for item in packet.get("material_gaps", [])]}
-    result = task_record_evidence_review(project_root, task_id, operation_id, assessment)
+    result = task_record_evidence_review(
+        project_root, task_id, operation_id, assessment,
+        _expected_material_revisions=_expected_source_revisions(packet))
     return {"task_packet": result, "review_record_ref": result.get("review_record_ref"),
             "operation_id": operation_id}
