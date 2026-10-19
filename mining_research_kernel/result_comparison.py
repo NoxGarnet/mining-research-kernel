@@ -619,16 +619,23 @@ def compare_results(project_root: str | os.PathLike[str], *, task_id: str, quest
         points.append(item)
     computable = sum(1 for item in points if item["delta"] is not None)
     result_status = "INSUFFICIENT" if not computable else "PROVISIONAL_WITH_GAPS"
+    has_run_binding = any(isinstance(payload.get("run_binding"), Mapping)
+                          for payload in (bpayload, cpayload))
+    solver_gaps = (["comparison_operation_does_not_execute_solver"] if has_run_binding
+                   else ["solver_not_run"])
     judgment = {"status": result_status,
         "summary": f"Computed candidate-minus-baseline arithmetic deltas for {computable} selected points; engineering comparability remains unverified.",
-        "gaps": list(dict.fromkeys(gaps + ([] if computable == len(points) else ["one_or_more_selected_points_insufficient"]) + ["solver_not_run", "engineering_causality_not_verified"])),
+        "gaps": list(dict.fromkeys(gaps + ([] if computable == len(points) else ["one_or_more_selected_points_insufficient"]) + solver_gaps + ["engineering_causality_not_verified"])),
         "next_action": {"action": next_action, "executable": False, "requires_user_choice": True}}
     comparison = {"status": result_status, "baseline_asset_ref": baseline_asset_ref,
         "candidate_asset_ref": candidate_asset_ref, "point_ids": list(point_ids), "points": points,
         "comparability_note": comparability_note,
         "metadata": {"baseline": copy.deepcopy(bmeta), "candidate": copy.deepcopy(cmeta)},
         "conditions_are_caller_assertions": True,
-        "statement": "Existing exported data only; no solver was run and no engineering causality or physical comparability is verified."}
+        "statement": ("Existing exported data only; this comparison operation does not execute a solver. "
+            "Caller-associated run bindings do not authenticate CSV causality; engineering causality and physical comparability remain unverified."
+            if has_run_binding else
+            "Existing exported data only; no solver was run and no engineering causality or physical comparability is verified.")}
     related_context = {"snapshots": related_snapshots,
         "meaning": "User-associated historical context only; it does not establish that a script produced either CSV."}
     sources = [{"asset_ref": baseline["id"], "evidence_ref": baseline_evidence["id"],
