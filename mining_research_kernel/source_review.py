@@ -11,6 +11,7 @@ from mining_research_kernel.r2_workflow import (
     _embedded_material_hash, _id, _sha256_json, task_record_evidence_review, task_start,
 )
 from mining_research_kernel.zotero_reading import validate_capture
+from mining_research_kernel.reading_observation import validate_observation
 
 
 _CITATION = re.compile(r"\[evidence:([^\]]+)\]")
@@ -23,7 +24,7 @@ def _payload_record(store: ResearchStore, asset_id: str, evidence_ids: list[str]
     asset = store.latest_record(asset_id, "Asset")
     if asset is None:
         raise ValueError(f"unknown asset_ref: {asset_id}")
-    if asset.get("asset_kind") not in {"zotero_reading_capture", "documentation_query_snapshot"}:
+    if asset.get("asset_kind") not in {"zotero_reading_capture", "documentation_query_snapshot", "reading_observation"}:
         raise ValueError(f"unsupported source Asset kind: {asset_id}")
     if _embedded_material_hash(asset) != asset.get("content_sha256"):
         raise ValueError(f"embedded payload hash mismatch: {asset_id}")
@@ -49,7 +50,7 @@ def _payload_record(store: ResearchStore, asset_id: str, evidence_ids: list[str]
             raise ValueError(f"invalid Zotero capture payload: {asset_id}: {exc}") from exc
         if capture.get("origin") == "synthetic" and payload["request"].get("task_context") != "synthetic":
             raise ValueError(f"synthetic Zotero source is mislabeled: {asset_id}")
-    else:
+    elif kind == "documentation_query_snapshot":
         if payload.get("kind") != "documentation_query_observation" or not isinstance(payload.get("documentation_result"), Mapping):
             raise ValueError(f"invalid documentation snapshot payload: {asset_id}")
         result = payload["documentation_result"]
@@ -74,6 +75,19 @@ def _payload_record(store: ResearchStore, asset_id: str, evidence_ids: list[str]
         uncovered = result.get("uncovered", [])
         if not isinstance(uncovered, list) or not all(isinstance(item, str) and item.strip() for item in uncovered):
             raise ValueError(f"invalid uncovered documentation scope: {asset_id}")
+    else:
+        if payload.get("kind") != "reading_observation_record" or not isinstance(payload.get("request"), Mapping):
+            raise ValueError(f"invalid reading observation payload: {asset_id}")
+        try:
+            observation = validate_observation(payload["request"].get("observation"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid reading observation payload: {asset_id}: {exc}") from exc
+        provenance = payload.get("provenance", {})
+        if (not isinstance(provenance, Mapping)
+                or provenance.get("request_sha256") != _sha256_json(payload["request"])):
+            raise ValueError(f"reading observation request hash mismatch: {asset_id}")
+        if observation.get("origin") == "synthetic" and payload["request"].get("task_context") != "synthetic":
+            raise ValueError(f"synthetic reading observation is mislabeled: {asset_id}")
     return asset, selected, payload
 
 
@@ -141,6 +155,38 @@ def _overview(asset, evidence, payload):
             "limits": ["historical caller supplied capture; source not revalidated",
                        "page observations apply only to saved capture ranges", "scientific and numeric claims NOT_VERIFIED"],
         }
+    if kind == "reading_observation":
+        observation = payload["request"]["observation"]
+        source = observation["source"]
+        passages = observation["passages"]
+        read = [p for p in passages if p["status"] == "read"]
+        failed = [p for p in passages if p["status"] == "unavailable"]
+        return {
+            "asset_ref": asset["id"], "asset_revision": asset["revision"], "asset_kind": kind,
+            "evidence_refs": [e["id"] for e in evidence], "content_sha256": asset["content_sha256"],
+            "identity": {k: source.get(k) for k in ("source_id", "title", "doi", "url", "version",
+                                                     "source_kind", "source_sha256", "authority")},
+            "reader": copy.deepcopy(observation["reader"]), "captured_at": observation["captured_at"],
+            "hashes": {"original_source_sha256": source.get("source_sha256"),
+                       "reading_text_sha256": [{"locator": copy.deepcopy(p["locator"]), "sha256": p.get("text_sha256")}
+                                               for p in read],
+                       "embedded_payload_sha256": asset["content_sha256"]},
+            "coverage": {"read_passages": [{"locator": copy.deepcopy(p["locator"]), "text_sha256": p.get("text_sha256"),
+                                             "excerpt": p["excerpt"][:_MAX_EXCERPT_CHARS],
+                                             "excerpt_truncated": len(p["excerpt"]) > _MAX_EXCERPT_CHARS}
+                                            for p in read],
+                         "unavailable_passages": [{"locator": copy.deepcopy(p["locator"]), "status": p["status"]}
+                                                  for p in failed]},
+            "saved_passages": copy.deepcopy(passages), "provenance": copy.deepcopy(payload.get("provenance", {})),
+            "reading_status": "READ_WITH_LIMITS" if read else "READ_INSUFFICIENT",
+            "truncation_flags": {"saved_excerpts": any(len(p["excerpt"]) > _MAX_EXCERPT_CHARS for p in read),
+                                 "identity": False, "coverage": False},
+            "expansion": {"record_ids": [asset["id"], *[e["id"] for e in evidence]]},
+            "limits": ["agent supplied reading observation; original source not revalidated",
+                       "source authority is caller asserted and is not authentication",
+                       "version and source hash may be unknown; derived reading layer is not the original source",
+                       "scientific and numeric claims NOT_VERIFIED", *observation["limitations"]],
+        }
     result = payload["documentation_result"]
     citation = result.get("citation", {})
     saved_passages = result.get("passages", [])
@@ -201,6 +247,8 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
             evs = _evidence_for_asset(store, aid, "zotero_reading_observation")
         elif asset.get("asset_kind") == "documentation_query_snapshot":
             evs = _evidence_for_asset(store, aid, "documentation_query_observation")
+        elif asset.get("asset_kind") == "reading_observation":
+            evs = _evidence_for_asset(store, aid, "reading_observation")
         else:
             raise ValueError(f"unsupported source Asset kind: {aid}")
         current, selected, payload = _payload_record(store, aid, evs)
@@ -218,13 +266,20 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
     if review_mode == "combined_sources" and not {"zotero_reading_capture", "documentation_query_snapshot"}.issubset(kinds):
         raise ValueError("source review requires at least one Zotero capture and one documentation query snapshot")
     if review_mode == "literature_comparison":
-        papers = [o["identity"] for o in overviews if o["asset_kind"] == "zotero_reading_capture"]
-        identities = {(p.get("instance_id"), p.get("library_id"), p.get("item_key")) for p in papers}
-        if len(papers) < 2 or len(identities) != len(papers):
+        papers = [o for o in overviews if o["asset_kind"] in {"zotero_reading_capture", "reading_observation"}]
+        identities = []
+        for overview in papers:
+            identity = overview["identity"]
+            doi = identity.get("doi")
+            key = ("doi", doi.lower()) if isinstance(doi, str) and doi else (
+                ("source_id", identity.get("source_id")) if overview["asset_kind"] == "reading_observation"
+                else ("zotero", identity.get("instance_id"), identity.get("library_id"), identity.get("item_key")))
+            identities.append(key)
+        if len(papers) < 2 or len(set(identities)) != len(papers):
             raise ValueError("literature comparison requires at least two distinct paper identities")
-        if any(not o.get("coverage", {}).get("read_page_ranges")
-               for o in overviews if o["asset_kind"] == "zotero_reading_capture"):
-            raise ValueError("each selected paper must have successfully read page coverage")
+        if any(not (o.get("coverage", {}).get("read_page_ranges") if o["asset_kind"] == "zotero_reading_capture"
+                    else o.get("coverage", {}).get("read_passages")) for o in papers):
+            raise ValueError("each selected paper must have successfully read coverage")
     bindings = [{"asset_ref": a["id"], "revision": a["revision"], "sha256": a["content_sha256"],
                  "evidence_refs": o["evidence_refs"],
                  "evidence_revisions": {eid: store.latest_record(eid, "Evidence")["revision"]
@@ -265,8 +320,17 @@ def start_source_review(project_root, *, task_id: str, question: str, asset_refs
             task_request["input"]["research_question_id"] = _continuation["question_record"]["id"]
         elif _research_tracking:
             task_request["input"]["research_question_id"] = f"{task_id}.question.1"
+        expected_material_revisions = {
+            binding["asset_ref"]: binding["revision"] for binding in bindings
+        }
+        expected_material_revisions.update({
+            evidence_id: revision
+            for binding in bindings
+            for evidence_id, revision in binding["evidence_revisions"].items()
+        })
         packet = task_start(project_root, task_request,
-                            _validated_research_question=_continuation)
+                            _validated_research_question=_continuation,
+                            _expected_material_revisions=expected_material_revisions)
     review_template = ("## Summary\n<nonempty text>\n\n## Findings\n- <interpretation> [evidence:<id>]\n\n"
                        "## Gaps\n- <limits text>\n\n## Next\n<suggestion; user retains finish/next choice>\n")
     return {"task_packet": packet, "sources": overviews, "review_template": review_template,
@@ -355,7 +419,9 @@ def record_source_review(project_root, *, task_id: str, operation_id: str, note:
                   "material_gaps": [{"asset_id": item["asset_id"], "reason": str(item.get("reason", "source limitation")),
                                      "next_action": "preserve this source scope limitation in subsequent interpretation"}
                                     for item in packet.get("material_gaps", [])]}
-    result = task_record_evidence_review(project_root, task_id, operation_id, assessment)
+    result = task_record_evidence_review(
+        project_root, task_id, operation_id, assessment,
+        _expected_material_revisions=_expected_source_revisions(packet))
     return {"task_packet": result, "review_record_ref": result.get("review_record_ref"), "operation_id": operation_id}
 
 
@@ -388,13 +454,15 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
                 or any(store.latest_record(eid, "Evidence")["revision"] != revisions[eid]
                        for eid in selected_evidence)):
             raise ValueError("source Evidence revision changed or was not bound at review start")
-        if checked_asset["asset_kind"] not in {"zotero_reading_capture", "documentation_query_snapshot"}:
+        if checked_asset["asset_kind"] not in {"zotero_reading_capture", "documentation_query_snapshot", "reading_observation"}:
             raise ValueError("source review packet includes an unsupported source kind")
         kinds.add(checked_asset["asset_kind"])
         if packet.get("task_context") != "synthetic":
             if checked_asset["asset_kind"] == "zotero_reading_capture" and payload.get("request", {}).get("capture", {}).get("origin") == "synthetic":
                 raise ValueError("synthetic source records require synthetic task_context")
             if checked_asset["asset_kind"] == "documentation_query_snapshot" and payload.get("documentation_result", {}).get("citation", {}).get("trust_class") == "synthetic":
+                raise ValueError("synthetic source records require synthetic task_context")
+            if checked_asset["asset_kind"] == "reading_observation" and payload.get("request", {}).get("observation", {}).get("origin") == "synthetic":
                 raise ValueError("synthetic source records require synthetic task_context")
         payload = asset.get("payload", {}) if asset else {}
         gaps = []
@@ -408,7 +476,7 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
             if any(p.get("status") != "read" for p in capture.get("pages", [])): gaps.append("failed page ranges are unavailable and provide no support")
             if not any(p.get("status") == "read" for p in capture.get("pages", [])): gaps.append("no successfully captured page content")
             gaps.append("page findings are limited to saved capture coverage; original source not freshly reread")
-        elif asset:
+        elif asset and asset.get("asset_kind") == "documentation_query_snapshot":
             result = payload.get("documentation_result", {})
             request = payload.get("request", {})
             status, coverage_scope = result.get("status"), result.get("coverage_scope")
@@ -425,15 +493,44 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
                 gaps.append("official local documentation applies only to the recorded product and document build; other versions are not inferred")
             gaps.extend(result.get("uncovered", []))
             gaps.append("documentation query status applies only to saved query coverage, not paper or engineering verification")
+        elif asset and asset.get("asset_kind") == "reading_observation":
+            observation = payload.get("request", {}).get("observation", {})
+            source = observation.get("source", {})
+            gaps.extend(observation.get("limitations", []))
+            gaps.extend(f"passage {p.get('locator', {}).get('value')}: " + "; ".join(p.get("limitations", []))
+                        for p in observation.get("passages", []) if isinstance(p, Mapping) and p.get("limitations"))
+            if source.get("version") is None: gaps.append("source version unknown; no version-specific conclusion")
+            if source.get("source_sha256") is None: gaps.append("original source file hash unknown")
+            gaps.extend(["reading is agent supplied and not authenticated or independently revalidated",
+                         "observation is a derived reading layer; source.authority is caller asserted"])
+            if source.get("source_kind") == "local_text":
+                gaps.append("local text is not presumed to be a publication; source_id and title are caller supplied")
+            if observation.get("origin") == "synthetic": gaps.append("synthetic observation; production evidence not established")
+            if not any(p.get("status") == "read" for p in observation.get("passages", [])):
+                gaps.append("no successfully captured passage content")
         reading_status, citation_evidence_allowed = "READ_WITH_LIMITS", True
-        if asset and asset.get("asset_kind") == "documentation_query_snapshot":
+        if asset and asset.get("asset_kind") == "reading_observation":
+            observation = payload.get("request", {}).get("observation", {})
+            read = [p for p in observation.get("passages", []) if p.get("status") == "read"]
+            reading_status, citation_evidence_allowed = ("READ_WITH_LIMITS", bool(read)) if read else ("READ_INSUFFICIENT", False)
+        elif asset and asset.get("asset_kind") == "documentation_query_snapshot":
             doc_result = payload.get("documentation_result", {})
             if doc_result.get("status") == "DISCOVERY_ONLY" or doc_result.get("coverage_scope") == "discovery_only":
                 reading_status, citation_evidence_allowed = "READ_INSUFFICIENT", False
             elif doc_result.get("status") in {"CANNOT_READ", "CANNOT_VERIFY"}:
                 reading_status = "READ_INSUFFICIENT"
+        identity = None
+        if asset.get("asset_kind") == "reading_observation":
+            src = payload.get("request", {}).get("observation", {}).get("source", {})
+            identity = ("doi", src.get("doi").lower()) if src.get("doi") else ("source_id", src.get("source_id"))
+        elif asset.get("asset_kind") == "zotero_reading_capture":
+            cap = payload.get("request", {}).get("capture", {})
+            item = cap.get("item", {})
+            identity = (("doi", item.get("doi").lower()) if item.get("doi") else
+                        ("zotero", cap.get("instance_id"), cap.get("library_id"), item.get("key")))
         results.append({"asset_id": asset["id"], "evidence_refs": list(selected_evidence),
                         "content_sha256": asset["content_sha256"],
+                        "paper_identity": identity,
                         "locator": {"asset_revision": asset["revision"], "asset_kind": asset["asset_kind"]},
                         "reading_status": reading_status,
                         "citation_evidence_allowed": citation_evidence_allowed,
@@ -442,13 +539,27 @@ def _sources_for_task(store: ResearchStore, packet: Mapping[str, Any]) -> list[d
     if mode == "combined_sources" and not {"zotero_reading_capture", "documentation_query_snapshot"}.issubset(kinds):
         raise ValueError("source review task must bind both required source kinds")
     if mode == "literature_comparison":
-        papers = [store.latest_record(aid, "Asset") for aid in bound_assets]
-        papers = [a for a in papers if a and a.get("asset_kind") == "zotero_reading_capture"]
-        identities = {(a["payload"]["request"]["capture"].get("instance_id"),
-                       a["payload"]["request"]["capture"].get("library_id"),
-                       a["payload"]["request"]["capture"].get("item", {}).get("key")) for a in papers}
+        papers = [item for item in results if item.get("paper_identity")]
+        identities = {item["paper_identity"] for item in papers}
         if len(papers) < 2 or len(identities) != len(papers):
             raise ValueError("literature comparison requires at least two distinct paper identities")
     if bound_assets != set(packet.get("asset_refs", [])) or bound_evidence != set(packet.get("evidence_refs", [])):
         raise ValueError("source review task Asset/Evidence allowlist does not match its source bindings")
     return results
+
+
+def _expected_source_revisions(packet: Mapping[str, Any]) -> dict[str, int]:
+    """Pin every selected source record through the review Decision commit."""
+    expected: dict[str, int] = {}
+    bindings = packet.get("input", {}).get("source_bindings", [])
+    if not isinstance(bindings, list):
+        raise ValueError("source review packet has invalid source bindings")
+    for binding in bindings:
+        if not isinstance(binding, Mapping) or type(binding.get("revision")) is not int:
+            raise ValueError("source review packet has invalid Asset revision binding")
+        expected[binding["asset_ref"]] = binding["revision"]
+        revisions = binding.get("evidence_revisions")
+        if not isinstance(revisions, Mapping) or any(type(value) is not int for value in revisions.values()):
+            raise ValueError("source review packet has invalid Evidence revision bindings")
+        expected.update(revisions)
+    return expected

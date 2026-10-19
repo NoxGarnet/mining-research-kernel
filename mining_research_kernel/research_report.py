@@ -77,6 +77,13 @@ def _paper_capture(asset):
     return capture if isinstance(item, Mapping) and item else None
 
 
+def _reading_observation(asset):
+    if not isinstance(asset, Mapping) or asset.get("asset_kind") != "reading_observation":
+        return None
+    from mining_research_kernel.reading_observation import validate_observation
+    return validate_observation(asset.get("payload", {}).get("request", {}).get("observation"))
+
+
 def _asset_caption(asset):
     if not asset:
         return "来源历史版本不可用"
@@ -85,6 +92,11 @@ def _asset_caption(asset):
     if capture:
         item = capture["item"]
         return item.get("title") or item.get("key") or asset["id"]
+    observation = _reading_observation(asset)
+    if observation:
+        source = observation["source"]
+        identity = "; ".join(str(value) for value in (source.get("doi"), source.get("url")) if value)
+        return (source.get("title") or source["source_id"]) + (f" · {identity}" if identity else "")
     result = payload.get("documentation_result", {})
     citation = result.get("citation", {}) if isinstance(result, Mapping) else {}
     return citation.get("document_family") or citation.get("source_id") or asset["id"]
@@ -92,6 +104,16 @@ def _asset_caption(asset):
 
 def _coverage(asset):
     payload = asset.get("payload", {})
+    observation = _reading_observation(asset)
+    if observation:
+        good = [p for p in observation["passages"] if p["status"] == "read"]
+        bad = [p for p in observation["passages"] if p["status"] != "read"]
+        scopes = ", ".join(p["locator"]["value"] for p in good)
+        gaps = list(observation["limitations"])
+        gaps.extend(limit for passage in observation["passages"] for limit in passage["limitations"])
+        gaps.extend("未成功读取：" + p["locator"]["value"] for p in bad)
+        gaps.extend("阅读文本哈希未知：" + p["locator"]["value"] for p in good if p["text_sha256"] is None)
+        return scopes or "没有成功读取的定位范围", "; ".join(dict.fromkeys(gaps))
     capture = _paper_capture(asset)
     if capture:
         pages = capture.get("pages", [])
@@ -224,8 +246,14 @@ def _render_comparison(lines, comparison, assets, evidence, bindings):
 
 
 def _source_identity(asset, asset_ref):
+    observation = _reading_observation(asset)
+    if observation:
+        source = observation["source"]
+        return "paper:doi:" + source["doi"] if source.get("doi") else "paper:source:" + source["source_id"]
     capture = _paper_capture(asset)
     item = capture.get("item", {}) if capture else {}
+    if isinstance(item, Mapping) and item.get("doi"):
+        return "paper:doi:" + item["doi"]
     if isinstance(item, Mapping) and item.get("key"):
         return "paper:" + ":".join(str(capture.get(k) or "") for k in ("instance_id", "library_id")) + ":" + str(item["key"])
     return "asset:" + str(asset_ref)
@@ -240,7 +268,10 @@ def _decision_sources(decision, versions):
     pinned_assets, _ = _pinned_sources(assessment, versions)
     bindings = {b.get("asset_ref"): b for b in assessment.get("source_bindings", []) if isinstance(b, Mapping)}
     rows = {}
-    for row in comparison.get("sources", []):
+    source_rows = (comparison.get("sources", []) if isinstance(comparison, Mapping) else
+                   [{"asset_ref": b.get("asset_ref"), "dimensions": {}}
+                    for b in assessment.get("source_bindings", []) if isinstance(b, Mapping)])
+    for row in source_rows:
         if not isinstance(row, Mapping):
             continue
         aid = row.get("asset_ref")
@@ -251,6 +282,10 @@ def _decision_sources(decision, versions):
         pages = capture.get("pages", []) if isinstance(capture, Mapping) else []
         coverage = sorted({(p.get("attachment_key"), p.get("start_page"), p.get("end_page"), p.get("status"))
                            for p in pages if isinstance(p, Mapping)})
+        observation = _reading_observation(asset)
+        if observation:
+            coverage = sorted((p["locator"]["kind"], p["locator"]["value"], p["status"])
+                              for p in observation["passages"])
         status = {name: cell.get("status") for name, cell in row.get("dimensions", {}).items()
                   if isinstance(cell, Mapping)}
         refs = sorted({cite.get("evidence_id") for cell in row.get("dimensions", {}).values()
@@ -259,7 +294,7 @@ def _decision_sources(decision, versions):
         rows[identity] = {"asset_ref": aid, "coverage": coverage, "statuses": status,
                           "evidence": refs, "caption": _asset_caption(asset)}
     current_judgment = decision.get("judgment", {})
-    return rows, current_judgment.get("summary") or comparison.get("summary")
+    return rows, current_judgment.get("summary") or (comparison.get("summary") if isinstance(comparison, Mapping) else None)
 
 
 def _source_decision_ancestor(decision, versions):
@@ -299,8 +334,15 @@ def _render_bound_sources(lines, assessment, assets, evidence):
         asset = assets.get(aid)
         payload = asset.get("payload", {}) if isinstance(asset, Mapping) else {}
         capture = _paper_capture(asset)
+        observation = _reading_observation(asset)
         citation = {}
-        if capture:
+        if observation:
+            source, reader = observation["source"], observation["reader"]
+            versions_text = (f"{source.get('version') or '来源版本未知'}; r{binding.get('revision')}; "
+                             f"{source['source_kind']}; {reader['tool']} / {reader['method']}; "
+                             f"capture {observation['captured_at']}; "
+                             f"来源文件哈希（调用方声明）：{source.get('source_sha256') or '未知'}")
+        elif capture:
             identity = capture.get("item", {})
             versions_text = f"capture {identity.get('version')}; r{binding.get('revision')}"
         else:
@@ -310,7 +352,9 @@ def _render_bound_sources(lines, assessment, assets, evidence):
             if citation.get("trust_class") == "community_mcp" and not citation.get("document_build"):
                 versions_text += "（社区 MCP 未返回文档版本）"
         coverage, uncovered = _coverage(asset)
-        trust = citation.get("trust_class") if not isinstance(capture, Mapping) else "来源未重新核验"
+        trust = ("派生阅读观察；来源权威为调用方声明：" + observation["source"]["authority"] +
+                 "；阅读行为、来源身份和科学结论未独立验证" if observation else
+                 citation.get("trust_class") if not isinstance(capture, Mapping) else "来源未重新核验")
         ev_revs = binding.get("evidence_revisions", {})
         ev_text = ", ".join(f"{eid} r{ev_revs.get(eid, '?')}" if evidence.get(eid)
                              else f"{eid}（历史 Evidence 版本不可用）"

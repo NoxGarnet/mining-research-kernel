@@ -16,6 +16,11 @@ with page-bounded comparison cells, use [literature comparison](LITERATURE_COMPA
 
 ## Read from an existing Zotero connection
 
+For a web paper or standalone local PDF already read by the Agent, use
+[general reading observations](READING_OBSERVATIONS.md). This records the chosen
+tool's output without creating Zotero identities or adding a source reader to
+the Kernel. The Zotero connection below remains optional.
+
 Select an explicitly configured Host-side Zotero stdio registration. The
 Kernel starts that selected runtime as a read-only client. It does not
 install a server, edit application settings, inspect a library database, or

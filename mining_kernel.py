@@ -146,6 +146,13 @@ def main(argv=None):
     zr.add_argument("--task-context", choices=("production", "synthetic"), default="production")
     zc = sub.add_parser("validate-zotero-reading", help="validate one external reading capture without writing records")
     zc.add_argument("capture")
+    ro = sub.add_parser("reading-record", help="save a bounded Agent-supplied reading observation; does not open the source")
+    ro.add_argument("--project-root", required=True)
+    ro.add_argument("--observation-id", required=True)
+    ro.add_argument("--observation", required=True, help="explicit UTF-8 JSON observation from the selected reader")
+    ro.add_argument("--task-context", choices=("production", "synthetic"), default="production")
+    vo = sub.add_parser("validate-reading-observation", help="validate a reading observation without writing records or opening its source")
+    vo.add_argument("observation")
     zs = sub.add_parser("zotero-search", help="search an explicitly configured read-only Zotero connection")
     zs.add_argument("--registration", required=True)
     zs.add_argument("--query", required=True)
@@ -563,6 +570,25 @@ def main(argv=None):
                "asset_refs": packet["asset_refs"], "evidence_refs": packet["evidence_refs"],
                "research_judgment_status": packet["research_judgment_status"],
                "source_queries_performed": False, "run_created": False, "verification_created": False}
+    elif args.command in {"reading-record", "validate-reading-observation"}:
+        from mining_research_kernel.reading_observation import validate_observation, record_reading_observation
+        with Path(args.observation).expanduser().open("rb") as stream:
+            observation_bytes = stream.read(256 * 1024 + 1)
+        if len(observation_bytes) > 256 * 1024:
+            raise ValueError("reading observation exceeds 256 KiB")
+        observation = validate_observation(json.loads(observation_bytes.decode("utf-8-sig")))
+        if args.command == "validate-reading-observation":
+            out = {"valid": True, "source_id": observation["source"]["source_id"],
+                   "source_kind": observation["source"]["source_kind"],
+                   "passages": len(observation["passages"]),
+                   "query_performed": False, "source_revalidated": False}
+        else:
+            out = {"type": "ReadingObservationReceipt", **record_reading_observation(
+                args.project_root, observation_id=args.observation_id,
+                observation=observation, task_context=args.task_context)}
+            if out.get("reading_status") == "UNAVAILABLE":
+                print(json.dumps(out, ensure_ascii=False, indent=2))
+                return 2
     elif args.command in {"zotero-record", "validate-zotero-reading"}:
         from mining_research_kernel.zotero_reading import validate_capture
         capture_path = Path(args.capture).expanduser()

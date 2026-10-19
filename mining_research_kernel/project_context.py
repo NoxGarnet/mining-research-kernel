@@ -207,6 +207,10 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                                   "recorded_status": record.get("status"),
                                   "basis": "registered Asset; not a new read", "location": loc,
                                   "show_argv": show})
+                if record.get("asset_kind") == "reading_observation":
+                    source = record.get("payload", {}).get("request", {}).get("observation", {}).get("source", {})
+                    materials[-1]["title"] = _preview(source.get("title", ""))
+                    materials[-1]["source_kind"] = source.get("source_kind")
             elif record["type"] == "Failure":
                 failures.append({"kind": "failure", "id": rid, "revision": record["revision"],
                                  "status": record.get("status"),

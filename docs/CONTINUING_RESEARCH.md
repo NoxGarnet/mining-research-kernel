@@ -23,8 +23,9 @@ without installing a source connection or preparing comparison JSON.
 1. Recover the question, selected task and latest recorded judgment. Use the
    project entry and existing authorization; ask only about material missing
    decisions. The user determines goals, boundaries and completion.
-2. Identify the specific evidence gap. Use existing [Zotero reading](RESEARCH_SOURCES.md)
-   or [documentation reading](ITASCA_READING.md) for the needed pages or sections.
+2. Identify the specific evidence gap. Let the Agent read web, local PDF or text
+   with its chosen tool and [record the observation](READING_OBSERVATIONS.md),
+   or use existing [Zotero reading](RESEARCH_SOURCES.md) or [documentation reading](ITASCA_READING.md).
    Record failures and unknown versions. An inherited observation is not a
    fresh source read.
 3. Continue from the named reviewed task. Select the full active set of source

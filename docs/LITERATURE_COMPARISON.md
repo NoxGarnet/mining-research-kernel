@@ -16,10 +16,12 @@ can generate a readable report from the saved comparison.
 
 ## Select the reading scope
 
-Read selected PDF pages with [Zotero reading](RESEARCH_SOURCES.md). Start with
-at least two distinct paper identities, each with successful saved page
-coverage. Repeated captures of the same paper do not count as another study.
-Metadata or an abstract search result alone is not a page reading.
+Read selected passages using the Agent's existing tools and save
+[general reading observations](READING_OBSERVATIONS.md), or use
+[Zotero reading](RESEARCH_SOURCES.md). Start with at least two distinct paper
+identities, each with successfully saved reading coverage. Repeated captures,
+including mixed Zotero/general observations with the same DOI, do not count as
+another study. Metadata or a search result alone is not a passage reading.
 
 Choose pages that address the question. A cover page may contain no methods
 or results; that is a reason to keep those cells unknown or propose further
@@ -55,6 +57,9 @@ For each source and dimension:
 - Use `reported` for an interpretation with a concrete value and citations
   bound to that source. Paper citations identify the Evidence, PDF attachment
   and page range within successful saved reading coverage.
+- For general observations, use `{"evidence_id":"<bound Evidence>","locator":"<exact successful locator label>"}`.
+  Web sections need no invented PDF pagination. Only saved successful locators
+  support reported cells; failed or uncaptured locators are rejected.
 - Use `not_reported_in_read_scope` when the pages read do not establish that
   information. Keep its value null, give a short explanation and leave its
   citations empty. This does not assert that the whole paper omits it.
