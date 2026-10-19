@@ -22,13 +22,9 @@ from mining_research_kernel.itasca_execution import (
 from mining_research_kernel.records import ResearchStore
 
 
-TEST_TMP = Path(r"E:\Ekernel-evaluation\mrk-itasca-test-tmp")
-TEST_TMP.mkdir(parents=True, exist_ok=True)
-
-
 class ItascaExecutionTests(unittest.TestCase):
     def setUp(self):
-        self._temporary = tempfile.TemporaryDirectory(dir=TEST_TMP)
+        self._temporary = tempfile.TemporaryDirectory()
         self.root = Path(self._temporary.name)
         (self.root / "research_project.json").write_text(
             json.dumps({"schema_version": 1, "project_id": "itasca-test"}), encoding="utf-8")
@@ -116,6 +112,24 @@ class ItascaExecutionTests(unittest.TestCase):
         unknown_field["unexpected"] = "reject"
         with self.assertRaises(jsonschema.ValidationError):
             jsonschema.validate(unknown_field, schema)
+
+    def test_status_transport_failure_without_task_id_retains_last_state(self):
+        self.prepare()
+        self.record("submit-1", self.observation("submission"))
+        failed_query = self.observation("status", ok=False)
+        failed_query["tool_result"]["error"].pop("details")
+        receipt = self.record("query-disconnected", failed_query)
+        self.assertEqual(receipt["state"], "pending")
+        self.assertEqual(receipt["run_ref"]["task_id"], "a1b2c3")
+        loaded = load_itasca_run(self.root, "run-1")
+        self.assertEqual(loaded["observations"][-1], failed_query)
+        self.assertIn("bridge_unavailable", render_itasca_run_report(self.root, run_id="run-1"))
+        self.assertTrue(self.record("query-disconnected", failed_query)["status"] == "replayed")
+        self.prepare("unsubmitted")
+        with self.assertRaisesRegex(ValueError, "task_id is required"):
+            self.record("query-before-submission", failed_query, run_id="unsubmitted")
+        self.record("query-recovered", self.observation("status", status="completed"))
+        self.assertEqual(itasca_run_progress(self.root, run_id="run-1")["status"], "completed")
 
     def test_changed_input_and_wrong_external_script_are_rejected_before_binding(self):
         self.prepare()

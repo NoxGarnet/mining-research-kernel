@@ -392,7 +392,7 @@ def _status_from_observation(observation: Mapping[str, Any], current: str) -> st
         if result["ok"]:
             return "pending"
         # A failed MCP call carrying a task ID may have been accepted.
-        return "submission_unknown" if _observation_task_id(observation) else "submission_unknown"
+        return "submission_unknown"
     if not result["ok"]:
         return "submission_unknown" if current == "submission_unknown" else current
     status = result["data"]["task_status"]
@@ -491,8 +491,11 @@ def record_itasca_observation(project_root: str | os.PathLike[str], *, run_id: s
                         and candidate.get("engine_session") == plan["engine_session"]
                         and candidate.get("task_id") == request_task_id):
                     raise ValueError("task_id is already associated with another run in this engine_session")
-        elif normalized["phase"] != "submission" or normalized["tool_result"]["ok"]:
+        elif normalized["tool_result"]["ok"] or (normalized["phase"] == "status" and not bound_task):
             raise ValueError("task_id is required for this observation")
+        # A transport error may omit the task ID. For a previously bound run,
+        # retain the raw failed query and last observed state, without guessing
+        # an engine outcome or changing the saved task identity.
         state = run_ref.get("state", "prepared")
         new_state = _status_from_observation(normalized, state)
         if new_state not in _TRANSITIONS.get(state, set()):
