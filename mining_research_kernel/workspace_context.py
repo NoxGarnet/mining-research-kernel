@@ -1,11 +1,12 @@
 """Bounded navigation from an explicit lightweight workspace INDEX.md."""
 from __future__ import annotations
 
-import re
 import stat
 import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
+
+from .markdown_navigation import inline_links, mask_comments_and_fences
 
 MAX_INDEX_BYTES = 65536
 _REPARSE = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -35,27 +36,6 @@ def _argv(project_root: Path) -> list[str]:
             "--project-root", str(project_root)]
 
 
-def _strip_fences(text: str) -> str:
-    """Mask fenced Markdown examples, including an unclosed final fence."""
-    lines = text.splitlines(keepends=True)
-    output, marker, width = [], None, 0
-    for line in lines:
-        match = re.match(r"^[ \t]{0,3}(\x60{3,}|~{3,})(.*?)(?:\r?\n)?$", line)
-        if marker is None:
-            if match:
-                fence = match.group(1)
-                marker, width = fence[0], len(fence)
-                output.append(re.sub(r"[^\r\n]", " ", line))
-            else:
-                output.append(line)
-        else:
-            output.append(re.sub(r"[^\r\n]", " ", line))
-            closing = re.match(r"^[ \t]{0,3}(\x60{3,}|~{3,})[ \t]*(?:\r?\n)?$", line)
-            if closing and closing.group(1)[0] == marker and len(closing.group(1)) >= width:
-                marker = None
-    return "".join(output)
-
-
 def workspace_context(workspace_root: str | Path, *, max_index_bytes: int = MAX_INDEX_BYTES) -> dict:
     supplied = Path(workspace_root).expanduser().absolute()
     if max_index_bytes < 1:
@@ -82,10 +62,10 @@ def workspace_context(workspace_root: str | Path, *, max_index_bytes: int = MAX_
         return _empty(root, "INDEX.md is missing")
     clipped = len(raw) > max_index_bytes
     text = raw[:max_index_bytes].decode("utf-8-sig", errors="replace")
-    prose = _strip_fences(text)
+    prose = mask_comments_and_fences(text)
     rows, seen, diagnostics = [], set(), []
-    for match in re.finditer(r"(?<!!)\[[^\]\n]+\]\((<[^>\n]+>|[^\s()]+)\)", prose):
-        target = match.group(1).strip("<>")
+    for match in inline_links(prose):
+        target = match.group(2).strip("<>")
         try:
             url = urlsplit(target)
         except ValueError as exc:

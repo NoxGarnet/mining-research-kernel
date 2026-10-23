@@ -54,7 +54,12 @@ DAT/FIS/Python files), contain only letters/numbers/underscore/dot/hyphen and
 directory separators, and are deduplicated within each entry. Spaces, commands,
 expressions, directories without filenames, absolute paths and parent traversal
 are not recognized as inline material paths; use a Markdown link or explicit
-manifest for other valid filenames. Fenced examples are excluded. `entry_line`
+manifest for other valid filenames. HTML comments and fenced examples (including
+an unclosed or truncated final comment/fence), links quoted as inline code, and escaped link syntax
+are excluded. Single-backtick filenames nested inside a longer code span are
+also examples rather than material entries. Comment delimiters inside code are
+literal; fences inside comments do not hide links after the comment closes.
+Malformed link URLs produce a warning while other materials remain navigable. `entry_line`
 locates the mention in the entry, not a verified location inside the source.
 Bare filenames are literal entry-relative candidates only: prose may describe a
 filename used inside several case folders. No existence or contextual location

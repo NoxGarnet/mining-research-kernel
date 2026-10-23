@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
 from .core import safe_path
+from .markdown_navigation import inline_code_spans, inline_links, mask_comments_and_fences
 from .on_demand import (
     _continuation_parent, _decision_bound_to_task_state, _decision_records,
     _decision_selection, _judgment, _latest_records, _question_and_routes,
@@ -94,13 +95,17 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
                         "read_location": {"path": str(path)}, "entry_scan_truncated": clipped})
         if clipped:
             warnings.append(f"{name}: only first {MAX_ENTRY_BYTES} bytes inspected for links")
-        # Fenced examples are not an entry's material catalogue.
-        prose = re.sub(r"```.*?```|~~~.*?~~~", lambda m: re.sub(r"[^\n]", " ", m[0]), text, flags=re.S)
+        # Comments and fenced examples are not an entry's material catalogue.
+        prose = mask_comments_and_fences(text)
         linked_paths, link_spans = set(), []
-        for match in re.finditer(r"(?<!!)\[([^\]\n]+)\]\((<[^>\n]+>|[^\s()]+)\)", prose):
+        for match in inline_links(prose):
             link_spans.append(match.span())
             title, target = match.groups()
-            url = urlsplit(target.strip("<>"))
+            try:
+                url = urlsplit(target.strip("<>"))
+            except ValueError as exc:
+                warnings.append(f"{name}: malformed link ignored: {exc}")
+                continue
             if url.scheme or url.netloc or not url.path:
                 continue
             relative = unquote(url.path)
@@ -108,16 +113,16 @@ def project_context(project_root: str | Path, *, manifest: str | None = None,
             materials.append({"kind": "material", "id": f"{name}:{match.start()}",
                               "title": _preview(title), "basis": f"explicit link in {name}",
                               "location": _location(root, (Path(name).parent / relative).as_posix()), "anchor": unquote(url.fragment)})
-        for match in re.finditer(r"(?<!`)`([^`\n]+)`(?!`)", prose):
-            if any(start <= match.start() < end for start, end in link_spans):
+        for code_start, code_end, width in inline_code_spans(prose):
+            if width != 1 or any(start <= code_start < end for start, end in link_spans):
                 continue
-            relative = _inline_file_path(match[1])
+            relative = _inline_file_path(prose[code_start + 1:code_end - 1])
             if relative is None or relative in linked_paths:
                 continue
             linked_paths.add(relative)
-            materials.append({"kind": "material", "id": f"{name}:inline:{match.start()}",
+            materials.append({"kind": "material", "id": f"{name}:inline:{code_start}",
                               "title": _preview(relative), "basis": f"explicit inline file path in {name}",
-                              "entry_line": text.count("\n", 0, match.start()) + 1,
+                              "entry_line": text.count("\n", 0, code_start) + 1,
                               "location": _location(root, (Path(name).parent / relative).as_posix())})
     if not entries:
         warnings.append("No configured entry, START.md or README.md; no project purpose inferred.")

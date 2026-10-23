@@ -113,6 +113,69 @@ class ProjectContextTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, r"materials\[0\].path"):
             project_context(self.root, manifest="list.json")
 
+    def test_malformed_link_warns_without_hiding_valid_materials(self):
+        (self.root / "START.md").write_text(
+            "[Broken](http://[)\n[Evidence](inputs/evidence.csv)\n`notes.txt`\n",
+            encoding="utf-8")
+        before = self.snapshot()
+        view = project_context(self.root, limit=20)
+        materials = [row for row in view["items"] if row["kind"] == "material"]
+        self.assertEqual(["Evidence", "notes.txt"], [row["title"]["text"] for row in materials])
+        self.assertTrue(any("START.md: malformed link ignored" in warning for warning in view["warnings"]))
+        self.assertEqual(before, self.snapshot())
+
+    def test_comments_do_not_become_materials_or_shift_visible_path_lines(self):
+        text = (
+            "<!-- [Old](old.csv)\n`hidden.txt` -->\n"
+            "<!--\n```md\n[Archived](archived.csv)\n-->\n"
+            "[Evidence](evidence.csv)\n`notes.txt`\n"
+            "<!-- unfinished [Hidden](hidden.csv)\n`other.txt`\n"
+        )
+        (self.root / "START.md").write_text(text, encoding="utf-8")
+        before = self.snapshot()
+        view = project_context(self.root, limit=20)
+        materials = [row for row in view["items"] if row["kind"] == "material"]
+        self.assertEqual(["Evidence", "notes.txt"], [row["title"]["text"] for row in materials])
+        self.assertEqual(8, materials[-1]["entry_line"])
+        self.assertEqual(before, self.snapshot())
+
+    def test_fenced_examples_do_not_become_materials(self):
+        cases = (
+            "```md\n[Example](inputs/example.csv)\n`hidden.txt`\n",
+            "````md\n```\n[Example](inputs/example.csv)\n`hidden.txt`\n````\n",
+            "~~~md\n```\n[Example](inputs/example.csv)\n`hidden.txt`\n~~~\n",
+            "\t```md\n[Example](inputs/example.csv)\n`hidden.txt`\n",
+        )
+        entry = self.root / "START.md"
+        for example in cases:
+            with self.subTest(example=example):
+                entry.write_text("[Evidence](inputs/evidence.csv)\n" + example, encoding="utf-8")
+                view = project_context(self.root, limit=20)
+                materials = [row for row in view["items"] if row["kind"] == "material"]
+                self.assertEqual(["Evidence"], [row["title"]["text"] for row in materials])
+        # Bounded reads can cut off the closing fence of an otherwise valid file.
+        text = "[Evidence](inputs/evidence.csv)\n```md\n[Example](inputs/example.csv)\n```\n"
+        entry.write_text(text, encoding="utf-8")
+        with patch("mining_research_kernel.project_context.MAX_ENTRY_BYTES", len(text) - 4):
+            view = project_context(self.root, limit=20)
+        self.assertEqual(1, view["counts"]["materials"])
+        self.assertTrue(any("only first" in warning for warning in view["warnings"]))
+
+    def test_inline_link_examples_are_ignored_and_file_paths_keep_line_numbers(self):
+        text = (
+            "# Entry\n`[Example](inputs/example.csv)`\n"
+            "``[Nested `example`](inputs/nested.csv)``\n"
+            r"\[Escaped](inputs/escaped.csv)" + "\n"
+            "[Evidence](inputs/evidence.csv)\n````md\n```\n`hidden.txt`\n````\n"
+            "`notes.txt`\n"
+            "``outer `nested.txt` example``\n"
+            r"\`escaped.txt`" + "\n"
+        )
+        (self.root / "START.md").write_text(text, encoding="utf-8")
+        materials = [row for row in self.all_items() if row["kind"] == "material"]
+        self.assertEqual(["Evidence", "notes.txt"], [row["title"]["text"] for row in materials])
+        self.assertEqual(10, materials[-1]["entry_line"])
+
     def test_configured_nested_entry_resolves_links_without_opening_sources(self):
         from research_project import enable_research
         enable_research(self.root, "nested-entry")
