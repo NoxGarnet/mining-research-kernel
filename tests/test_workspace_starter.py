@@ -147,6 +147,68 @@ class WorkspaceStarterTests(unittest.TestCase):
         self.assertEqual(before, after)
         self.assertFalse((root / "research").exists())
 
+    def test_inline_and_escaped_link_examples_are_not_project_candidates(self):
+        root = self.base / "inline-examples"
+        root.mkdir()
+        index = root / "INDEX.md"
+        index.write_text(
+            "`[Example](projects/example/START.md)`\n"
+            "``[Nested `example`](projects/nested/START.md)``\n"
+            "`multiline\n[Example](projects/multiline/START.md)\ncode`\n"
+            r"\[Escaped](projects/escaped/START.md)" + "\n"
+            r"\\[Real](projects/real/START.md)" + "\n"
+            "[With `code` in label](projects/label/README.md)\n"
+            r"\` escaped tick before `[Example](projects/hidden/START.md)`" + "\n"
+            "![Image](projects/image/START.md)\n", encoding="utf-8")
+        before = index.read_bytes()
+        view = workspace_context(root)
+        self.assertEqual(["real", "label"], [row["project_id"] for row in view["projects"]])
+        self.assertEqual(before, index.read_bytes())
+
+    def test_unmatched_ticks_in_other_paragraphs_do_not_hide_project_links(self):
+        root = self.base / "paragraphs"
+        root.mkdir()
+        (root / "INDEX.md").write_text(
+            "Unmatched ` in one paragraph.\n\n"
+            "[Real](projects/real/START.md)\n\n"
+            "Another unmatched ` in a different paragraph.\n", encoding="utf-8")
+        view = workspace_context(root)
+        self.assertEqual(["real"], [row["project_id"] for row in view["projects"]])
+
+    def test_comments_hide_old_projects_and_do_not_open_fences(self):
+        root = self.base / "comments"
+        root.mkdir()
+        index = root / "INDEX.md"
+        index.write_text(
+            "<!-- [Old](projects/old/START.md) -->\n"
+            "<!--\n```md\n[Archived](projects/archived/START.md)\n-->\n"
+            "[Real](projects/real/START.md)\n"
+            "<!-- unfinished [Hidden](projects/hidden/README.md)\n",
+            encoding="utf-8")
+        before = index.read_bytes()
+        view = workspace_context(root)
+        self.assertEqual(["real"], [row["project_id"] for row in view["projects"]])
+        self.assertEqual(before, index.read_bytes())
+
+    def test_comment_delimiters_in_code_do_not_hide_project_links(self):
+        root = self.base / "comment-examples"
+        root.mkdir()
+        (root / "INDEX.md").write_text(
+            "`<!--` literal inline delimiter\n[Inline](projects/inline/START.md)\n\n"
+            "```md\n<!-- literal fenced delimiter\n```\n"
+            "[Fenced](projects/fenced/START.md)\n", encoding="utf-8")
+        self.assertEqual(["inline", "fenced"],
+                         [row["project_id"] for row in workspace_context(root)["projects"]])
+
+    def test_index_cut_off_within_comment_keeps_only_visible_projects(self):
+        root = self.base / "bounded-comment"
+        root.mkdir()
+        text = "[Real](projects/real/START.md)\n<!-- [Hidden](projects/hidden/README.md) -->\n"
+        (root / "INDEX.md").write_text(text, encoding="utf-8")
+        view = workspace_context(root, max_index_bytes=len(text) - 5)
+        self.assertTrue(view["index"]["truncated"])
+        self.assertEqual(["real"], [row["project_id"] for row in view["projects"]])
+
     def test_navigation_reports_missing_malformed_truncated_and_unsafe(self):
         missing = workspace_context(self.base / "absent")
         self.assertIn("does not exist", missing["diagnostics"][0])
@@ -191,6 +253,10 @@ class WorkspaceStarterTests(unittest.TestCase):
         (root / "INDEX.md").write_text(bounded, encoding="utf-8")
         clipped = workspace_context(root, max_index_bytes=60)
         self.assertEqual(["ok"], [row["project_id"] for row in clipped["projects"]])
+        (root / "INDEX.md").write_text(
+            "[ok](projects/ok/START.md)\n\t```md\n[fake](projects/fake/START.md)\n",
+            encoding="utf-8")
+        self.assertEqual(["ok"], [row["project_id"] for row in workspace_context(root)["projects"]])
 
     def test_cli_argv_works_and_old_project_context_remains_compatible(self):
         root = self.base / "legacy"

@@ -33,6 +33,12 @@ root index, reports every recognized project candidate, and returns a
 python -B -X utf8 .\mining_kernel.py project-context --project-root (Join-Path $starterRoot 'projects\roadway-support')
 ```
 
+HTML comments, fenced examples, links quoted as inline code, and escaped link
+syntax are excluded from project candidates. An unclosed or truncated final
+comment/fence hides its remaining content. Comment delimiters inside code stay
+literal. A malformed URL produces a diagnostic and
+does not prevent other index links from being recognized.
+
 The user decides what this task should deliver, its boundaries, and when to
 finish or hand it off. First recover what they have already said in the
 conversation or project entry. If a consequential point is unclear, ask a

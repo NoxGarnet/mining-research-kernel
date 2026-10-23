@@ -27,6 +27,10 @@ python -B -X utf8 .\mining_kernel.py workspace-context --workspace-root $starter
 python -B -X utf8 .\mining_kernel.py project-context --project-root (Join-Path $starterRoot 'projects\roadway-support')
 ```
 
+HTML 注释、代码块、行内代码中的示例链接及被反斜杠转义的链接语法不计入项目候选。
+未闭合或被读取上限截断的末尾注释、代码块会隐藏其剩余内容；代码里的注释标记按普通文本处理。
+畸形 URL 会产生诊断提示，其余索引链接仍继续识别。
+
 本次任务交付什么、边界在哪里、何时完成或交接，由用户决定。
 先从对话和项目入口恢复已经明确的决定。只有影响当前工作的关键事项不清楚时，才简短询问，
 例如“这次希望交付什么？”或“有哪些内容明确不在本次范围内？”。
